@@ -1,14 +1,16 @@
 from __future__ import annotations
+from celery.utils.log import get_task_logger
 
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import requests
+logger = get_task_logger(__name__)
 
 REALIZATIONS_QUERY = """
 query AllOpportunityApplication(
-  $person_committee: [Int]
-  $date_approved: DateTime
+  $person_committee: Int
+  $from: DateTime
   $per_page: Int!
   $page: Int!
 ) {
@@ -16,7 +18,7 @@ query AllOpportunityApplication(
     filters: {
       person_committee: $person_committee
       date_approved: {
-        start_date: $date_approved
+        from: $from
       }
     }
     pagination: {
@@ -50,6 +52,7 @@ query AllOpportunityApplication(
           short_name_display
         }
         host_lc {
+          id
           name
         }
         home_mc {
@@ -85,22 +88,23 @@ class ExpaRealizationsClient:
             "Accept": "*/*",
         }
 
-    def fetch_realizations(self,
-                            * ,
-                person_committee: int,
-                date_approved: str,
-                per_page: int,
-                page: int,) -> List[Dict[str, Any]]:
+    def fetch_realizations(
+      self,
+      *,
+      person_committee: int,
+      from_date: str,
+      per_page: int,
+      page: int,
+    ) -> List[Dict[str, Any]]:
         payload = {
             "query": REALIZATIONS_QUERY,
             "variables": {
-                "person_committee": [int(person_committee)],
-                "date_approved": date_approved,
+                "person_committee": int(person_committee),
+                "from": str(from_date),
                 "per_page": int(per_page),
                 "page": int(page),
             },
-}
-
+        }
         response = requests.post(
             self.api_url,
             json=payload,
@@ -110,5 +114,8 @@ class ExpaRealizationsClient:
         response.raise_for_status()
 
         data = response.json()
+        errors = data.get("errors")
+        if errors:
+            raise RuntimeError(f"EXPA GraphQL errors: {errors}")
         realizations = data.get("data", {}).get("allOpportunityApplication", {}).get("data", [])
         return realizations

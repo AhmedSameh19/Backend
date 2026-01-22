@@ -61,6 +61,8 @@ class Settings:
     EXPA_LC_CODES: List[int]
     EXPA_HOME_MC_ID: int
     EXPA_LC_NAMES: Optional[dict]
+
+    EXPA_APPROVED_FROM: str
     @staticmethod
     def from_env() -> "Settings":
         default_lc_codes = [
@@ -105,6 +107,7 @@ class Settings:
             EXPA_LC_CODES=_env_csv_ints("EXPA_LC_CODES", default_lc_codes),
             EXPA_LC_NAMES=default_lc_codes_names,
             EXPA_HOME_MC_ID=_env_int("EXPA_HOME_MC_ID", 1609),
+            EXPA_APPROVED_FROM=_env("EXPA_APPROVED_FROM", "2025-01-01") or "2025-01-01",
         )
 
 

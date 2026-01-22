@@ -11,7 +11,7 @@ from app.db.base import Base
 
 
 class ExpaLead(Base):
-    __tablename__ = "expa_leads"
+    __tablename__ = "expa_icx_leads"    
 
     # EXPA person id (GraphQL: data.id)
     expa_person_id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -77,43 +77,6 @@ class ExpaLead(Base):
         nullable=False,
         server_default=func.now(),
     )
-    status_snapshot = relationship(
-        "ExpaLeadStatusSnapshot",
-        back_populates="lead",
-        uselist=False,
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
 
-    b2c_status_snapshot = relationship(
-        "B2CLeadStatusSnapshot",
-        back_populates="lead",
-        uselist=False,
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-  
-    comments = relationship(
-        "ExpaLeadComment",
-        back_populates="lead",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
-    assigned_member = relationship(
-        "Member",
-        back_populates="assigned_leads"
-    )
-
-    follow_ups = relationship(
-        "ExpaLeadFollowUp",
-        back_populates="lead",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-    b2c_comments = relationship(
-        "B2CComment",
-        back_populates="lead"
-    )
 
   
