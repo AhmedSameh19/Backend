@@ -50,8 +50,8 @@ def _env_json_lc_option_ids(name: str) -> Optional[Dict[str, List[int]]]:
         for k, v in data.items():
             if isinstance(v, list):
                 out[str(k)] = [int(x) for x in v if isinstance(x, (int, float))]
-            elif isinstance(v, (int, float)):
-                out[str(k)] = [int(v)]
+            elif isinstance(part_v := v, (int, float)):
+                out[str(k)] = [int(part_v)]
         return out if out else None
     except (json.JSONDecodeError, TypeError, ValueError):
         return None
@@ -73,36 +73,6 @@ def _env_csv_ints(name: str, default: List[int]) -> List[int]:
     return items or default
 
 
-def _env_int_optional(name: str) -> Optional[int]:
-    raw = _env(name)
-    if raw is None or raw == "":
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return None
-
-
-def _env_json_lc_option_ids(name: str) -> Optional[Dict[str, List[int]]]:
-    """Parse env JSON like {"899": [123, 456]} for lc_id -> Podio category option ids."""
-    raw = _env(name)
-    if not raw or not raw.strip():
-        return None
-    try:
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            return None
-        out: Dict[str, List[int]] = {}
-        for k, v in data.items():
-            if isinstance(v, list):
-                out[str(k)] = [int(x) for x in v if isinstance(x, (int, float))]
-            elif isinstance(v, (int, float)):
-                out[str(k)] = [int(v)]
-        return out if out else None
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return None
-
-
 @dataclass(frozen=True)
 class Settings:
     # Infrastructure (Celery)
@@ -118,11 +88,12 @@ class Settings:
 
     EXPA_REGISTERED_FROM: str
     EXPA_REGISTERED_TO: str
+    EXPA_APPROVED_FROM: str
     EXPA_PER_PAGE: int
     EXPA_LC_CODES: List[int]
     EXPA_HOME_MC_ID: int
     EXPA_LC_NAMES: Optional[dict]
-    
+
     # Podio
     PODIO_CLIENT_ID: Optional[str]
     PODIO_CLIENT_SECRET: Optional[str]
@@ -146,7 +117,7 @@ class Settings:
             5688, 257, 2124, 171, 1727, 2125, 2817, 2818, 15,
             1725, 1114, 6683,
         ]
-        default_lc_codes_names={
+        default_lc_codes_names = {
             2820: "6th October University",
             1788: "AAST Alexandria",
             1322: "AAST in Cairo",
@@ -179,6 +150,7 @@ class Settings:
             AIESEC_API_TOKEN=_env("AIESEC_API_TOKEN"),
             EXPA_REGISTERED_FROM=_env("EXPA_REGISTERED_FROM", "2025-01-01") or "2025-01-01",
             EXPA_REGISTERED_TO=_env("EXPA_REGISTERED_TO", "2025-12-31") or "2025-12-31",
+            EXPA_APPROVED_FROM=_env("EXPA_APPROVED_FROM", "2025-01-01") or "2025-01-01",
             EXPA_PER_PAGE=_env_int("EXPA_PER_PAGE", 100),
             EXPA_LC_CODES=_env_csv_ints("EXPA_LC_CODES", default_lc_codes),
             EXPA_LC_NAMES=default_lc_codes_names,
