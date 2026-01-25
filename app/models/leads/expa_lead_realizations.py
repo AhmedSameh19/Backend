@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -11,7 +11,9 @@ from app.db.base import Base
 
 class ExpaLeadRealization(Base):
 	__tablename__ = "expa_lead_realizations"
-	
+	__table_args__ = (
+		UniqueConstraint("expa_person_id", "opp_id", name="uq_expa_lead_realizations_person_opp"),
+	)
 
 	id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
