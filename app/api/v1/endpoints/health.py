@@ -23,7 +23,7 @@ def health(db: Session = Depends(get_db)):
 @router.get("/test-expa-task")
 def test_expa_task():
     try:
-        task = fetch_realizations_hourly.delay()
+        task = fetch_members_monthly.delay()
         return {"task_id": task.id}
     except Exception:
         raise HTTPException(

@@ -14,7 +14,7 @@ def upsert_expa_realizations(db: Session, rows: List[Dict[str, Any]]) -> int:
 
     stmt = insert(ExpaLeadRealization.__table__).values(rows)
     stmt = stmt.on_conflict_do_update(
-        index_elements=["id"],
+        constraint="uq_expa_lead_realizations_person_opp",
         set_={
             "full_name": stmt.excluded.full_name,
             "email": stmt.excluded.email,
@@ -23,6 +23,8 @@ def upsert_expa_realizations(db: Session, rows: List[Dict[str, Any]]) -> int:
             "home_lc_id": stmt.excluded.home_lc_id,
             "host_lc_name": stmt.excluded.host_lc_name,
             "host_mc_name": stmt.excluded.host_mc_name,
+            "assigned_member_id": stmt.excluded.assigned_member_id,
+            "assigned_member_name": stmt.excluded.assigned_member_name,
             "programme": stmt.excluded.programme,
             "opp_title": stmt.excluded.opp_title,
             "status": stmt.excluded.status,
