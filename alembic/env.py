@@ -18,6 +18,8 @@ from app.models.leads.expa_lead_comments import ExpaLeadComment
 from app.models.leads.expa_lead_snapshot import ExpaLeadStatusSnapshot
 from app.models.members import Member
 from app.models.leads.expa_leads import ExpaLead  # noqa: F401  (ensures models are imported)
+from app.models.market_research.igv import IGVMarketResearch  # noqa: F401
+from app.models.market_research.b2b_market_research import B2BMarketResearch  # noqa: F401
 
 target_metadata = Base.metadata
 

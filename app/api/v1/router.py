@@ -8,6 +8,7 @@ from app.api.v1.endpoints.members import router as members_router
 from app.api.v1.endpoints.B2C.back_to_process import router as b2c_back_to_process_router
 from app.api.v1.endpoints.B2C.comments import router as b2c_comments_router
 from app.api.v1.endpoints.B2C.status import router as b2c_leads_router
+from app.api.v1.endpoints.market_research import router as market_research_router
 api_router = APIRouter()
 api_router.include_router(health_router, prefix="/health", tags=["health"])
 api_router.include_router(leads_router)
@@ -18,3 +19,4 @@ api_router.include_router(members_router)
 api_router.include_router(b2c_back_to_process_router)
 api_router.include_router(b2c_comments_router)
 api_router.include_router(b2c_leads_router)
+api_router.include_router(market_research_router, prefix="/market-research", tags=["market-research"])

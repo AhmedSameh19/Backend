@@ -61,6 +61,12 @@ class Settings:
     EXPA_LC_CODES: List[int]
     EXPA_HOME_MC_ID: int
     EXPA_LC_NAMES: Optional[dict]
+    
+    # Podio
+    PODIO_CLIENT_ID: Optional[str]
+    PODIO_CLIENT_SECRET: Optional[str]
+    PODIO_APP_ID: Optional[str]
+    PODIO_APP_TOKEN: Optional[str]
     @staticmethod
     def from_env() -> "Settings":
         default_lc_codes = [
@@ -105,6 +111,10 @@ class Settings:
             EXPA_LC_CODES=_env_csv_ints("EXPA_LC_CODES", default_lc_codes),
             EXPA_LC_NAMES=default_lc_codes_names,
             EXPA_HOME_MC_ID=_env_int("EXPA_HOME_MC_ID", 1609),
+            PODIO_CLIENT_ID=_env("PODIO_CLIENT_ID"),
+            PODIO_CLIENT_SECRET=_env("PODIO_CLIENT_SECRET"),
+            PODIO_APP_ID=_env("PODIO_APP_ID"),
+            PODIO_APP_TOKEN=_env("PODIO_APP_TOKEN"),
         )
 
 
