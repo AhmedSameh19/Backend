@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.oGX.leads import router as leads_router
 from app.api.v1.endpoints.oGX.Realizations.realizations import router as realizations_router
+from app.api.v1.endpoints.oGX.Realizations.standards import router as ogx_standards_router
 from app.api.v1.endpoints.oGX.status import router as status_router
 from app.api.v1.endpoints.oGX.comments import router as comments_router
 from app.api.v1.endpoints.oGX.followups import router as followups_router
@@ -18,6 +19,7 @@ api_router.include_router(health_router, prefix="/health", tags=["health"])
 api_router.include_router(auth_compat_router)
 api_router.include_router(leads_router)
 api_router.include_router(realizations_router)
+api_router.include_router(ogx_standards_router)
 api_router.include_router(status_router)
 api_router.include_router(comments_router)
 api_router.include_router(followups_router)
