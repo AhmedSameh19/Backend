@@ -36,3 +36,6 @@ dist/
 
 ### App/runtime artifacts
 celerybeat-schedule
+
+### PgBouncer secrets
+infra/pgbouncer/pgbouncer.ini
