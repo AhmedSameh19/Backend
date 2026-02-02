@@ -6,7 +6,8 @@ redis==5.0.8
 httpx==0.27.2
 celery==5.4.0
 alembic==1.13.2
-requests>=2.31.0
+requests==2.32.3
 google-auth>=2.27.0
 google-auth-oauthlib>=1.2.0
 google-api-python-client>=2.115.0
+python-dotenv==1.0.1

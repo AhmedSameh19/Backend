@@ -81,6 +81,10 @@ class Settings:
 
     # Database
     DATABASE_URL: Optional[str]
+    DB_POOL_SIZE: int
+    DB_MAX_OVERFLOW: int
+    DB_POOL_TIMEOUT: int
+    DB_CONNECT_TIMEOUT: int
 
     # EXPA/AIESEC
     AIESEC_API_URL: Optional[str]
@@ -146,6 +150,10 @@ class Settings:
             RABBITMQ_URL=_env("RABBITMQ_URL"),
             REDIS_URL=_env("REDIS_URL"),
             DATABASE_URL=_env("DATABASE_URL") or _env("DB_URL"),
+            DB_POOL_SIZE=_env_int("DB_POOL_SIZE", 5),
+            DB_MAX_OVERFLOW=_env_int("DB_MAX_OVERFLOW", 0),
+            DB_POOL_TIMEOUT=_env_int("DB_POOL_TIMEOUT", 5),
+            DB_CONNECT_TIMEOUT=_env_int("DB_CONNECT_TIMEOUT", 5),
             AIESEC_API_URL=_env("AIESEC_API_URL"),
             AIESEC_API_TOKEN=_env("AIESEC_API_TOKEN"),
             EXPA_REGISTERED_FROM=_env("EXPA_REGISTERED_FROM", "2025-01-01") or "2025-01-01",
