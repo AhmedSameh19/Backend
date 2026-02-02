@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
+import logging 
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,6 +12,8 @@ from app.models.leads.expa_leads import ExpaLead
 from app.models.members import Member
 
 from app.schemas.leads.leads import LeadAssignRequest, LeadBulkAssignRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/leads", tags=["Leads"])
 
@@ -59,10 +62,12 @@ def get_leads(
             }
 
         return {"items": items, "next_cursor": next_cursor}
-    except SQLAlchemyError:
-        raise HTTPException(status_code=503, detail="Database error")
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except SQLAlchemyError as e:
+        logger.exception("DB error in get_leads(home_lc_id=%s)", home_lc_id)
+        raise HTTPException(status_code=503, detail="Database error") from e
+    except Exception as e:
+        logger.exception("Unexpected error in get_leads(home_lc_id=%s)", home_lc_id)
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 # NEW: Bulk assign leads to a member
 # endpoint: PATCH /leads/assign/bulk

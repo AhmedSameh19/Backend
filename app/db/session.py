@@ -9,7 +9,10 @@ if not DATABASE_URL:
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,   
-    connect_args={"connect_timeout": 5},
+    connect_args={"connect_timeout": settings.DB_CONNECT_TIMEOUT},
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
 )
 
 SessionLocal = sessionmaker(
