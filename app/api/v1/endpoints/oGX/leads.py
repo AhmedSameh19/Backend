@@ -37,9 +37,15 @@ def get_leads(
                 status_code=400,
                 detail="cursor_created_at and cursor_expa_person_id must be provided together",
             )
+        # Special case: treat 1609 as "all leads" (no LC filtering)
+        if home_lc_id == 1609:
+            query = db.query(ExpaLead)
+        else:
+            query = db.query(ExpaLead).filter(ExpaLead.home_lc_id == home_lc_id)
 
-        query = db.query(ExpaLead).filter(ExpaLead.home_lc_id == home_lc_id)
         query = query.order_by(ExpaLead.created_at.desc(), ExpaLead.expa_person_id.desc())
+        
+        
 
         if cursor_created_at is not None and cursor_expa_person_id is not None:
             query = query.filter(

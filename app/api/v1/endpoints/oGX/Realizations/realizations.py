@@ -19,11 +19,18 @@ def get_realizations(
     db: Session = Depends(get_db),
 ):
     try:
-        stmt = (
-            select(ExpaLeadRealization)
-            .where(ExpaLeadRealization.home_lc_id == home_lc_id)
-            .order_by(ExpaLeadRealization.updated_at.desc(), ExpaLeadRealization.id.desc())
-        )
+
+        if home_lc_id == 1609:
+            stmt = (
+                select(ExpaLeadRealization)
+                .order_by(ExpaLeadRealization.updated_at.desc(), ExpaLeadRealization.id.desc())
+            )
+        else:
+            stmt = (
+                select(ExpaLeadRealization)
+                .where(ExpaLeadRealization.home_lc_id == home_lc_id)
+                .order_by(ExpaLeadRealization.updated_at.desc(), ExpaLeadRealization.id.desc())
+            )
         items = db.execute(stmt).scalars().all()
         return {"items": items}
     except SQLAlchemyError:
