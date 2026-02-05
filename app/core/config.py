@@ -79,6 +79,9 @@ class Settings:
     RABBITMQ_URL: Optional[str]
     REDIS_URL: Optional[str]
 
+    # CORS
+    CORS_ORIGINS: List[str]
+
     # Database
     DATABASE_URL: Optional[str]
     DB_POOL_SIZE: int
@@ -102,6 +105,7 @@ class Settings:
     EXPA_ICX_PROGRAMMES: List[int]
     EXPA_ICX_HOST_LC_IDS: List[int]
     EXPA_ICX_REALIZED_FROM: str
+    CORS_ORIGINS: List[str]
 
     # Podio
     PODIO_CLIENT_ID: Optional[str]
@@ -151,9 +155,13 @@ class Settings:
             1609: "MC Egypt"
         }
 
+        _cors_raw = _env("CORS_ORIGINS", "https://accelerator.aiesec.org.eg/")
+        cors_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+
         return Settings(
             RABBITMQ_URL=_env("RABBITMQ_URL"),
             REDIS_URL=_env("REDIS_URL"),
+            CORS_ORIGINS=cors_origins,
             DATABASE_URL=_env("DATABASE_URL") or _env("DB_URL"),
             DB_POOL_SIZE=_env_int("DB_POOL_SIZE", 5),
             DB_MAX_OVERFLOW=_env_int("DB_MAX_OVERFLOW", 0),

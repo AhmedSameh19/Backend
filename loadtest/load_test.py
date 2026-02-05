@@ -126,7 +126,7 @@ async def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Async load tester for the FastAPI backend")
-    parser.add_argument("--base-url", default="http://127.0.0.1:8000", help="Base URL, e.g. http://127.0.0.1:8000")
+    parser.add_argument("--base-url", default="https://api-accelerator.aiesec.org.eg", help="Base URL, e.g. https://api-accelerator.aiesec.org.eg")
     parser.add_argument(
         "--path",
         default="/api/v1/health/",

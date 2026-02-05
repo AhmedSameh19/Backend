@@ -9,6 +9,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
 
 app = FastAPI(title="AIESEC Egypt CRM API")
 
@@ -36,7 +37,7 @@ class StripXFrameOptionsMiddleware(BaseHTTPMiddleware):
 app.add_middleware(StripXFrameOptionsMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
