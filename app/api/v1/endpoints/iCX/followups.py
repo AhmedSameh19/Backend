@@ -19,6 +19,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/icx/leads", tags=["iCX Leads"])
 
 
+@router.get(
+    "/followups/created_by/{created_by_member_id}",
+    response_model=list[ICXFollowUpOut],
+    status_code=status.HTTP_200_OK,
+)
+def get_icx_followups_by_member(
+    created_by_member_id: str,
+    db: Session = Depends(get_db),
+) -> list[ICXFollowUpOut]:
+    try:
+        stmt = (
+            select(ExpaICXLeadFollowUp)
+            .where(ExpaICXLeadFollowUp.created_by_member_id == created_by_member_id)
+            .order_by(
+                ExpaICXLeadFollowUp.follow_up_at.desc(),
+                ExpaICXLeadFollowUp.created_at.desc(),
+                ExpaICXLeadFollowUp.id.desc(),
+            )
+        )
+        return db.execute(stmt).scalars().all()
+    except SQLAlchemyError as e:
+        logger.exception("DB error in get_icx_followups_by_member(created_by_member_id=%s)", created_by_member_id)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database error") from e
+    except Exception as e:
+        logger.exception(
+            "Unexpected error in get_icx_followups_by_member(created_by_member_id=%s)",
+            created_by_member_id,
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from e
+
+
 @router.post("/{application_id}/followups", response_model=ICXFollowUpOut)
 def create_icx_followup(
     application_id: str,
