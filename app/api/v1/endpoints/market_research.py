@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -21,6 +22,8 @@ from app.schemas.market_research import (
     B2BMarketResearchCreate,
     IGVMarketResearchOut,
     B2BMarketResearchOut,
+    MarketResearchStatusUpdate,
+    ScheduledVisitOut,
 )
 
 router = APIRouter()
@@ -150,6 +153,27 @@ async def get_market_research(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=error_detail,
         )
+
+
+@router.get("/scheduled-visits", response_model=List[ScheduledVisitOut], tags=["market-research"])
+def get_scheduled_visits(
+    db: Session = Depends(get_db),
+):
+    """
+    List IGV and B2B market research records that have a visit_date set (for calendar display).
+    """
+    out: List[ScheduledVisitOut] = []
+    igv_rows = db.execute(
+        select(IGVMarketResearch).where(IGVMarketResearch.visit_date.isnot(None))
+    ).scalars().all()
+    for row in igv_rows:
+        out.append(ScheduledVisitOut(id=row.id, company_name=row.company_name, visit_date=row.visit_date, source="igv"))
+    b2b_rows = db.execute(
+        select(B2BMarketResearch).where(B2BMarketResearch.visit_date.isnot(None))
+    ).scalars().all()
+    for row in b2b_rows:
+        out.append(ScheduledVisitOut(id=row.id, company_name=row.company_name, visit_date=row.visit_date, source="b2b"))
+    return out
 
 
 @router.get("/{item_id}", response_model=MarketResearchItem, tags=["market-research"])
@@ -316,7 +340,9 @@ def create_igv_market_research(
     Saves market research data to the database (not Podio).
     """
     try:
-        igv_record = IGVMarketResearch(**payload.model_dump())
+        data = payload.model_dump()
+        data["status"] = data["status"].value if hasattr(data.get("status"), "value") else data.get("status", "lead")
+        igv_record = IGVMarketResearch(**data)
         db.add(igv_record)
         db.commit()
         db.refresh(igv_record)
@@ -346,7 +372,9 @@ def create_b2b_market_research(
     Saves market research data to the database (not Podio).
     """
     try:
-        b2b_record = B2BMarketResearch(**payload.model_dump())
+        data = payload.model_dump()
+        data["status"] = data["status"].value if hasattr(data.get("status"), "value") else data.get("status", "lead")
+        b2b_record = B2BMarketResearch(**data)
         db.add(b2b_record)
         db.commit()
         db.refresh(b2b_record)
@@ -362,5 +390,61 @@ def create_b2b_market_research(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error: " + str(e),
+        )
+
+
+@router.patch("/igv/{item_id}", response_model=IGVMarketResearchOut, tags=["market-research"])
+def update_igv_market_research_status(
+    item_id: int,
+    payload: MarketResearchStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Update IGV market research status and/or visit date (e.g. lead -> contacted -> visited).
+    """
+    record = db.query(IGVMarketResearch).filter(IGVMarketResearch.id == item_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IGV market research record not found")
+    try:
+        if payload.status is not None:
+            record.status = payload.status.value
+        if payload.visit_date is not None:
+            record.visit_date = payload.visit_date
+        db.commit()
+        db.refresh(record)
+        return record
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database error: " + str(e),
+        )
+
+
+@router.patch("/b2b/{item_id}", response_model=B2BMarketResearchOut, tags=["market-research"])
+def update_b2b_market_research_status(
+    item_id: int,
+    payload: MarketResearchStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Update B2B market research status and/or visit date (e.g. lead -> contacted -> visited).
+    """
+    record = db.query(B2BMarketResearch).filter(B2BMarketResearch.id == item_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="B2B market research record not found")
+    try:
+        if payload.status is not None:
+            record.status = payload.status.value
+        if payload.visit_date is not None:
+            record.visit_date = payload.visit_date
+        db.commit()
+        db.refresh(record)
+        return record
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database error: " + str(e),
         )
 

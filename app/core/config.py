@@ -67,6 +67,12 @@ class Settings:
     PODIO_CLIENT_SECRET: Optional[str]
     PODIO_APP_ID: Optional[str]
     PODIO_APP_TOKEN: Optional[str]
+
+    # Google Calendar
+    GOOGLE_CLIENT_ID: Optional[str]
+    GOOGLE_CLIENT_SECRET: Optional[str]
+    GOOGLE_CALENDAR_REDIRECT_URI: Optional[str]
+
     @staticmethod
     def from_env() -> "Settings":
         default_lc_codes = [
@@ -115,6 +121,9 @@ class Settings:
             PODIO_CLIENT_SECRET=_env("PODIO_CLIENT_SECRET"),
             PODIO_APP_ID=_env("PODIO_APP_ID"),
             PODIO_APP_TOKEN=_env("PODIO_APP_TOKEN"),
+            GOOGLE_CLIENT_ID=_env("GOOGLE_CLIENT_ID"),
+            GOOGLE_CLIENT_SECRET=_env("GOOGLE_CLIENT_SECRET"),
+            GOOGLE_CALENDAR_REDIRECT_URI=_env("GOOGLE_CALENDAR_REDIRECT_URI"),
         )
 
 

@@ -7,3 +7,4 @@ from .b2c.b2c_comments import B2CComment  # noqa: F401
 from .b2c.b2c_status_snapshot import B2CLeadStatusSnapshot  # noqa: F401
 from .market_research.igv import IGVMarketResearch  # noqa: F401
 from .market_research.b2b_market_research import B2BMarketResearch  # noqa: F401
+from .google_calendar_token import GoogleCalendarToken  # noqa: F401

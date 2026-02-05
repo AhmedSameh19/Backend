@@ -1,1 +1,6 @@
 Generic single-database configuration.
+
+If you see "Can't locate revision identified by '...'" (e.g. after switching branches or using a DB that had a removed migration), fix your local DB only:
+  python -m alembic stamp e1f2a3b4c5d6
+  python -m alembic upgrade head
+This does not change any code or migration files; it only corrects your database's revision pointer.

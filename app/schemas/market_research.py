@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
+
+
+class CompanyProfileStatus(str, Enum):
+    """Company profile lifecycle status in market research"""
+    lead = "lead"
+    contacted = "contacted"
+    visited = "visited"
 
 
 class MarketResearchItem(BaseModel):
@@ -65,6 +73,8 @@ class IGVMarketResearchCreate(BaseModel):
     person_name: Optional[str] = Field(None, description="Contact person name")
     email: Optional[str] = Field(None, description="Contact email")
     position: Optional[str] = Field(None, description="Contact position")
+    status: CompanyProfileStatus = Field(CompanyProfileStatus.lead, description="Profile status (lead/contacted/visited)")
+    visit_date: Optional[datetime] = Field(None, description="Date of company visit (when status is visited)")
     
     class Config:
         from_attributes = True
@@ -87,7 +97,26 @@ class B2BMarketResearchCreate(BaseModel):
     person_name: Optional[str] = Field(None, description="Contact person name")
     email: Optional[str] = Field(None, description="Contact email")
     position: Optional[str] = Field(None, description="Contact position")
+    status: CompanyProfileStatus = Field(CompanyProfileStatus.lead, description="Profile status (lead/contacted/visited)")
+    visit_date: Optional[datetime] = Field(None, description="Date of company visit (when status is visited)")
     
+    class Config:
+        from_attributes = True
+
+
+class MarketResearchStatusUpdate(BaseModel):
+    """Partial update for status and visit date"""
+    status: Optional[CompanyProfileStatus] = Field(None, description="Profile status (lead/contacted/visited)")
+    visit_date: Optional[datetime] = Field(None, description="Date of company visit (when status is visited)")
+
+
+class ScheduledVisitOut(BaseModel):
+    """Scheduled company visit for calendar (IGV or B2B with visit_date set)."""
+    id: int
+    company_name: Optional[str] = None
+    visit_date: datetime
+    source: str = Field(..., description="'igv' or 'b2b'")
+
     class Config:
         from_attributes = True
 
@@ -110,6 +139,8 @@ class IGVMarketResearchOut(BaseModel):
     person_name: Optional[str] = None
     email: Optional[str] = None
     position: Optional[str] = None
+    status: str = "lead"
+    visit_date: Optional[datetime] = None
     created_at: datetime
     inserted_at: datetime
     updated_at: datetime
@@ -136,6 +167,8 @@ class B2BMarketResearchOut(BaseModel):
     person_name: Optional[str] = None
     email: Optional[str] = None
     position: Optional[str] = None
+    status: str = "lead"
+    visit_date: Optional[datetime] = None
     created_at: datetime
     inserted_at: datetime
     updated_at: datetime

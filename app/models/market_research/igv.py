@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, Index, Text, func
+from sqlalchemy import DateTime, Integer, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -33,6 +33,8 @@ class IGVMarketResearch(Base):
     person_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     email: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     position: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, server_default="lead")
+    visit_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
