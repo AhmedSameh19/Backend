@@ -79,3 +79,25 @@ class ExpaICXLead(Base):
     )
 
     assigned_member = relationship("Member")
+
+    comments = relationship(
+        "ExpaICXLeadComment",
+        back_populates="lead",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    follow_ups = relationship(
+        "ExpaICXLeadFollowUp",
+        back_populates="lead",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    status_snapshot = relationship(
+        "ExpaICXLeadStatusSnapshot",
+        back_populates="lead",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
