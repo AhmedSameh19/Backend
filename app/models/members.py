@@ -28,5 +28,7 @@ class Member(Base):
     )
     follow_ups_created = relationship(
         "ExpaLeadFollowUp",
+        back_populates="created_by",
+        foreign_keys="ExpaLeadFollowUp.created_by_member_id",
         passive_deletes=True
     )

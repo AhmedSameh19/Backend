@@ -65,4 +65,8 @@ class ExpaLeadFollowUp(Base):
 
     # Relationships
     lead = relationship("ExpaLead", back_populates="follow_ups")
-    created_by = relationship("Member")
+    created_by = relationship(
+        "Member",
+        back_populates="follow_ups_created",
+        foreign_keys=[created_by_member_id],
+    )

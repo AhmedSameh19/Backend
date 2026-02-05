@@ -4,5 +4,6 @@ from .leads.expa_lead_comments import ExpaLeadComment  # noqa: F401
 from .leads.expa_lead_snapshot import ExpaLeadStatusSnapshot  # noqa: F401
 from .leads.expa_lead_followups import ExpaLeadFollowUp  # noqa: F401
 from .leads.expa_lead_realizations import ExpaLeadRealization  # noqa: F401
+from .icx.expa_icx_leads import ExpaICXLead  # noqa: F401
 from .b2c.b2c_comments import B2CComment  # noqa: F401
 from .b2c.b2c_status_snapshot import B2CLeadStatusSnapshot  # noqa: F401
