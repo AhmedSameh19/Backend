@@ -71,6 +71,8 @@ class Settings:
     # iCX (opportunity applications)
     EXPA_ICX_CREATED_FROM: str
     EXPA_ICX_PROGRAMMES: List[int]
+    EXPA_ICX_HOST_LC_IDS: List[int]
+    EXPA_ICX_REALIZED_FROM: str
     @staticmethod
     def from_env() -> "Settings":
         default_lc_codes = [
@@ -122,6 +124,8 @@ class Settings:
             EXPA_APPROVED_FROM=_env("EXPA_APPROVED_FROM", "2025-01-01") or "2025-01-01",
             EXPA_ICX_CREATED_FROM=_env("EXPA_ICX_CREATED_FROM", "2025-01-01") or "2025-01-01",
             EXPA_ICX_PROGRAMMES=_env_csv_ints("EXPA_ICX_PROGRAMMES", [7, 8, 9]),
+            EXPA_ICX_HOST_LC_IDS=_env_csv_ints("EXPA_ICX_HOST_LC_IDS", default_lc_codes),
+            EXPA_ICX_REALIZED_FROM=_env("EXPA_ICX_REALIZED_FROM", "2025-01-01") or "2025-01-01",
         )
 
 

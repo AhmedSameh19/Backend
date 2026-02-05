@@ -22,6 +22,7 @@ from app.models.icx.expa_icx_leads import ExpaICXLead  # noqa: F401
 from app.models.icx.expa_icx_lead_comments import ExpaICXLeadComment  # noqa: F401
 from app.models.icx.expa_icx_lead_followups import ExpaICXLeadFollowUp  # noqa: F401
 from app.models.icx.expa_icx_lead_status_snapshot import ExpaICXLeadStatusSnapshot  # noqa: F401
+from app.models.icx.expa_icx_realizations import ExpaICXRealization  # noqa: F401
 from app.models.ogx.ogx_standards import OgxStandards  # noqa: F401
 
 target_metadata = Base.metadata
