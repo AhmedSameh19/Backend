@@ -8,6 +8,7 @@ from .icx.expa_icx_leads import ExpaICXLead  # noqa: F401
 from .icx.expa_icx_lead_comments import ExpaICXLeadComment  # noqa: F401
 from .icx.expa_icx_lead_followups import ExpaICXLeadFollowUp  # noqa: F401
 from .icx.expa_icx_lead_status_snapshot import ExpaICXLeadStatusSnapshot  # noqa: F401
+from .icx.expa_icx_realizations import ExpaICXRealization  # noqa: F401
 from .b2c.b2c_comments import B2CComment  # noqa: F401
 from .b2c.b2c_status_snapshot import B2CLeadStatusSnapshot  # noqa: F401
 from .market_research.igv import IGVMarketResearch  # noqa: F401
