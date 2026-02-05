@@ -98,6 +98,10 @@ class Settings:
     EXPA_HOME_MC_ID: int
     EXPA_LC_NAMES: Optional[dict]
 
+    # iCX (opportunity applications)
+    EXPA_ICX_CREATED_FROM: str
+    EXPA_ICX_PROGRAMMES: List[int]
+
     # Podio
     PODIO_CLIENT_ID: Optional[str]
     PODIO_CLIENT_SECRET: Optional[str]
@@ -163,6 +167,8 @@ class Settings:
             EXPA_LC_CODES=_env_csv_ints("EXPA_LC_CODES", default_lc_codes),
             EXPA_LC_NAMES=default_lc_codes_names,
             EXPA_HOME_MC_ID=_env_int("EXPA_HOME_MC_ID", 1609),
+            EXPA_ICX_CREATED_FROM=_env("EXPA_ICX_CREATED_FROM", "2025-01-01") or "2025-01-01",
+            EXPA_ICX_PROGRAMMES=_env_csv_ints("EXPA_ICX_PROGRAMMES", [7, 8, 9]),
             PODIO_CLIENT_ID=_env("PODIO_CLIENT_ID"),
             PODIO_CLIENT_SECRET=_env("PODIO_CLIENT_SECRET"),
             PODIO_APP_ID=_env("PODIO_APP_ID"),

@@ -18,6 +18,7 @@ celery = Celery(
         "app.workers.people_tasks",
         "app.workers.members_tasks",
         "app.workers.realizations_tasks",
+        "app.workers.icx_leads_tasks",
     ],
 )
 
@@ -32,6 +33,10 @@ celery.conf.update(
 celery.conf.beat_schedule = {
     "fetch-expa-people-every-hour": {
         "task": "expa.fetch_people",
+        "schedule": crontab(minute=0),  # at minute 0 of every hour
+    },
+    "fetch-expa-icx-leads-every-hour": {
+        "task": "expa.fetch_icx_leads",
         "schedule": crontab(minute=0),  # at minute 0 of every hour
     },
     "fetch-expa-realizations-every-hour": {

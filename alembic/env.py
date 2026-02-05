@@ -22,6 +22,7 @@ from app.models.market_research.igv import IGVMarketResearch  # noqa: F401
 from app.models.market_research.b2b_market_research import B2BMarketResearch  # noqa: F401
 from app.models.market_research.podio_scheduled_visit import PodioScheduledVisit  # noqa: F401
 from app.models.google_calendar_token import GoogleCalendarToken  # noqa: F401
+from app.models.icx.expa_icx_leads import ExpaICXLead  # noqa: F401
 from app.models.ogx.ogx_standards import OgxStandards  # noqa: F401
 
 target_metadata = Base.metadata
