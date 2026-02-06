@@ -55,16 +55,11 @@ services:
     ports:
       - "6432:5432"
     environment:
-      DB_HOST: app-807a9868-54c1-4871-bfbd-504a8a4bba0a-do-user-244201-0.h.db.ondigitalocean.com
-      DB_PORT: 25060
-      DB_NAME: defaultdb
-      DB_USER: doadmin
-      DB_PASSWORD: AVNS_tX4w6erHeU_O1e_pOE-
+      DATABASE_URL: postgres://doadmin:AVNS_tX4w6erHeU_O1e_pOE-@app-807a9868-54c1-4871-bfbd-504a8a4bba0a-do-user-244201-0.h.db.ondigitalocean.com:25060/defaultdb?sslmode=require
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 20
       RESERVE_POOL_SIZE: 0
       ADMIN_USERS: doadmin
-      SERVER_TLS_SSLMODE: require 
     restart: unless-stopped
 
