@@ -56,12 +56,14 @@ services:
       - "6432:5432"
     environment:
       DB_USER: doadmin
-      DB_PASSWORD: ${DB_PASSWORD}
-      DATABASE_URL: "postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require"
+      DB_PASSWORD: AVNS_tX4w6erHeU_O1e_pOE-
+      DB_HOST: app-807a9868-54c1-4871-bfbd-504a8a4bba0a-do-user-244201-0.h.db.ondigitalocean.com
+      DB_PORT: 25060
+      DB_NAME: defaultdb
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 20
       RESERVE_POOL_SIZE: 0
-      ADMIN_USERS: ${DB_USER}
+      ADMIN_USERS: doadmin
     restart: unless-stopped
 
