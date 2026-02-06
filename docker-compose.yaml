@@ -54,6 +54,8 @@ services:
     image: edoburu/pgbouncer:v1.25.1-p0
     ports:
       - "6432:5432"  # Expose PgBouncer to other containers
+    volumes:
+      - ./infra/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
     environment:
       DATABASE_URL: "postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require"
       POOL_MODE: transaction
