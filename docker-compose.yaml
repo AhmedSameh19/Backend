@@ -1,4 +1,4 @@
-version: "3.9"
+version: '3.9'
 
 services:
   api:
@@ -7,9 +7,21 @@ services:
       DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --workers 4
+      AIESEC_API_TOKEN: ${AIESEC_API_TOKEN}
+      AIESEC_API_URL: ${AIESEC_API_URL}
+      EXPA_HOME_MC_ID: ${EXPA_HOME_MC_ID}
+      EXPA_PER_PAGE: ${EXPA_PER_PAGE}
+      EXPA_REGISTERED_FROM: ${EXPA_REGISTERED_FROM}
+      EXPA_REGISTERED_TO: ${EXPA_REGISTERED_TO}
+      EXPA_APPROVED_FROM: ${EXPA_APPROVED_FROM}
+      DB_POOL_SIZE: ${DB_POOL_SIZE}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT}
+      DB_CONNECT_TIMEOUT: ${DB_CONNECT_TIMEOUT}
+      ENV: ${ENV}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
     ports:
-      - "8002:8000"
+      - "8000:8000"
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -25,7 +37,19 @@ services:
       DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
-    command: celery -A app.workers.celery_app.celery worker --loglevel=info
+      AIESEC_API_TOKEN: ${AIESEC_API_TOKEN}
+      AIESEC_API_URL: ${AIESEC_API_URL}
+      EXPA_HOME_MC_ID: ${EXPA_HOME_MC_ID}
+      EXPA_PER_PAGE: ${EXPA_PER_PAGE}
+      EXPA_REGISTERED_FROM: ${EXPA_REGISTERED_FROM}
+      EXPA_REGISTERED_TO: ${EXPA_REGISTERED_TO}
+      EXPA_APPROVED_FROM: ${EXPA_APPROVED_FROM}
+      DB_POOL_SIZE: "5"
+      DB_MAX_OVERFLOW: "0"
+      DB_POOL_TIMEOUT: "10"
+      DB_CONNECT_TIMEOUT: "5"
+      ENV: ${ENV}
+    command: celery -A app.workers.celery_app.celery worker --loglevel=info --concurrency=2
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -41,6 +65,14 @@ services:
       DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
+      AIESEC_API_TOKEN: ${AIESEC_API_TOKEN}
+      AIESEC_API_URL: ${AIESEC_API_URL}
+      EXPA_HOME_MC_ID: ${EXPA_HOME_MC_ID}
+      EXPA_PER_PAGE: ${EXPA_PER_PAGE}
+      EXPA_REGISTERED_FROM: ${EXPA_REGISTERED_FROM}
+      EXPA_REGISTERED_TO: ${EXPA_REGISTERED_TO}
+      EXPA_APPROVED_FROM: ${EXPA_APPROVED_FROM}
+      ENV: ${ENV}
     command: celery -A app.workers.celery_app.celery beat --loglevel=info
     depends_on:
       pgbouncer:
@@ -69,12 +101,11 @@ services:
   pgbouncer:
     image: edoburu/pgbouncer:v1.25.1-p0
     environment:
-      DB_HOST: app-807a9868-54c1-4871-bfbd-504a8a4bba0a-do-user-244201-0.h.db.ondigitalocean.com
-      DB_PORT: 25060
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
       DB_NAME: ${DB_NAME}
-      DB_USER: doadmin
+      DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
-
       SERVER_TLS_SSLMODE: require
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
