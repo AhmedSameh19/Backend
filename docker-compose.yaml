@@ -100,17 +100,10 @@ services:
 
   pgbouncer:
     image: edoburu/pgbouncer:v1.25.1-p0
-    environment:
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      SERVER_TLS_SSLMODE: require
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: 100
-      DEFAULT_POOL_SIZE: 20
-      ADMIN_USERS: doadmin
+    environment: ["/usr/bin/pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
+    volumes:
+      - ./infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 5432"]
       interval: 5s
