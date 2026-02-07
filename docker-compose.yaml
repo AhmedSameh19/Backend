@@ -1,5 +1,4 @@
 version: "3.9"
-
 services:
   api:
     build: .
@@ -11,55 +10,91 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
     depends_on:
-      - redis
-      - rabbitmq
-      - pgbouncer
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     restart: unless-stopped
 
   celery_worker:
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:6432/${DB_NAME}
-      REDIS_URL: ${REDIS_URL}
-      RABBITMQ_URL: ${RABBITMQ_URL}
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     command: celery -A app.workers.celery_app worker --loglevel=info
     depends_on:
-      - redis
-      - rabbitmq
-      - pgbouncer
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     restart: unless-stopped
 
   celery_beat:
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:6432/${DB_NAME}
-      REDIS_URL: ${REDIS_URL}
-      RABBITMQ_URL: ${RABBITMQ_URL}
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     command: celery -A app.workers.celery_app beat --loglevel=info
     depends_on:
-      - redis
-      - rabbitmq
-      - pgbouncer
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     restart: unless-stopped
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
     restart: unless-stopped
+    volumes:
+      - redis_data:/data
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:3-management-alpine
     restart: unless-stopped
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
 
   pgbouncer:
-    image: edoburu/pgbouncer:v1.25.1-p0
-    ports:
-      - "6432:5432"
+    image: bitnami/pgbouncer:1.25.1
     environment:
-      DATABASE_URL: postgres://doadmin:AVNS_tX4w6erHeU_O1e_pOE-@app-807a9868-54c1-4871-bfbd-504a8a4bba0a-do-user-244201-0.h.db.ondigitalocean.com:25060/defaultdb?sslmode=require
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: 100
-      DEFAULT_POOL_SIZE: 20
-      RESERVE_POOL_SIZE: 0
-      ADMIN_USERS: doadmin
+      POSTGRESQL_HOST: ${DB_HOST}
+      POSTGRESQL_PORT: ${DB_PORT:-25060}
+      POSTGRESQL_USERNAME: ${DB_USER}
+      POSTGRESQL_PASSWORD: ${DB_PASSWORD}
+      POSTGRESQL_DATABASE: ${DB_NAME}
+      PGBOUNCER_DATABASE: ${DB_NAME}
+      PGBOUNCER_PORT: 6432
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_MAX_CLIENT_CONN: 100
+      PGBOUNCER_DEFAULT_POOL_SIZE: 20
+      PGBOUNCER_RESERVE_POOL_SIZE: 5
+      PGBOUNCER_AUTH_TYPE: scram-sha-256
+      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/scripts/pgbouncer/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+volumes:
+  redis_data:
+  rabbitmq_data:
+```
+
+**Environment variables to set in Coolify:**
+```
+DB_PASSWORD=AVNS_tX4w6erHeU_O1e_pOE-
+DB_NAME=defaultdb
+POSTGRES_HOST=app-807a9868-54c1-4871-bfbd-504a8a4bba0a-do-user-244201-0.h.db.ondigitalocean.com
+POSTGRES_PORT=25060
+POSTGRES_USERNAME=doadmin
+POSTGRES_PASSWORD=AVNS_tX4w6erHeU_O1e_pOE-
