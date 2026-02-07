@@ -1,14 +1,15 @@
 version: "3.9"
+
 services:
   api:
     build: .
-    expose:
-      - "8000"
     environment:
-      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:6432/${DB_NAME}
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    ports:
+      - "8000:8000"
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -17,18 +18,14 @@ services:
       rabbitmq:
         condition: service_started
     restart: unless-stopped
-    labels:
-      - "coolify.managed=true"
-      - "coolify.service=api"
-      - "coolify.type=application"
 
   celery_worker:
     build: .
     environment:
-      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:6432/${DB_NAME}
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-    command: celery -A app.workers.celery_app worker --loglevel=info
+      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
+    command: celery -A app.workers.celery_app.celery worker --loglevel=info
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -37,16 +34,14 @@ services:
       rabbitmq:
         condition: service_started
     restart: unless-stopped
-    labels:
-      - "coolify.managed=true"
 
   celery_beat:
     build: .
     environment:
-      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:6432/${DB_NAME}
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-    command: celery -A app.workers.celery_app beat --loglevel=info
+      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
+    command: celery -A app.workers.celery_app.celery beat --loglevel=info
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -55,49 +50,43 @@ services:
       rabbitmq:
         condition: service_started
     restart: unless-stopped
-    labels:
-      - "coolify.managed=true"
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     volumes:
       - redis_data:/data
-    labels:
-      - "coolify.managed=true"
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: crm
+      RABBITMQ_DEFAULT_PASS: crm
     restart: unless-stopped
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    labels:
-      - "coolify.managed=true"
-      
+
   pgbouncer:
-    image: bitnami/pgbouncer:1.25.1
+    image: edoburu/pgbouncer:v1.25.1-p0
     environment:
-      POSTGRESQL_HOST: ${DB_HOST}
-      POSTGRESQL_PORT: ${DB_PORT:-25060}
-      POSTGRESQL_USERNAME: ${DB_USER}
-      POSTGRESQL_PASSWORD: ${DB_PASSWORD}
-      POSTGRESQL_DATABASE: ${DB_NAME}
-      PGBOUNCER_DATABASE: ${DB_NAME}
-      PGBOUNCER_PORT: 6432
-      PGBOUNCER_POOL_MODE: transaction
-      PGBOUNCER_MAX_CLIENT_CONN: 100
-      PGBOUNCER_DEFAULT_POOL_SIZE: 20
-      PGBOUNCER_RESERVE_POOL_SIZE: 5
-      PGBOUNCER_AUTH_TYPE: scram-sha-256
-      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits
-    restart: unless-stopped
+      DB_HOST: app-807a9868-54c1-4871-bfbd-504a8a4bba0a-do-user-244201-0.h.db.ondigitalocean.com
+      DB_PORT: 25060
+      DB_NAME: ${DB_NAME}
+      DB_USER: doadmin
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      SERVER_TLS_SSLMODE: require
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+      ADMIN_USERS: doadmin
     healthcheck:
-      test: ["CMD", "/opt/bitnami/scripts/pgbouncer/healthcheck.sh"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5432"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
 
 volumes:
   redis_data:
   rabbitmq_data:
-
