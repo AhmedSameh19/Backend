@@ -7,9 +7,9 @@ services:
       DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 4
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --workers 4
     ports:
-      - "8001:8000"
+      - "8002:8000"
     depends_on:
       pgbouncer:
         condition: service_healthy
