@@ -6,8 +6,8 @@ services:
       - "8000"
     environment:
       DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:6432/${DB_NAME}
-      REDIS_URL: ${REDIS_URL}
-      RABBITMQ_URL: ${RABBITMQ_URL}
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
     depends_on:
       pgbouncer:
@@ -17,6 +17,10 @@ services:
       rabbitmq:
         condition: service_started
     restart: unless-stopped
+    labels:
+      - "coolify.managed=true"
+      - "coolify.service=api"
+      - "coolify.type=application"
 
   celery_worker:
     build: .
@@ -33,6 +37,8 @@ services:
       rabbitmq:
         condition: service_started
     restart: unless-stopped
+    labels:
+      - "coolify.managed=true"
 
   celery_beat:
     build: .
@@ -49,19 +55,25 @@ services:
       rabbitmq:
         condition: service_started
     restart: unless-stopped
+    labels:
+      - "coolify.managed=true"
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     volumes:
       - redis_data:/data
+    labels:
+      - "coolify.managed=true"
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
     restart: unless-stopped
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-
+    labels:
+      - "coolify.managed=true"
+      
   pgbouncer:
     image: bitnami/pgbouncer:1.25.1
     environment:
@@ -88,13 +100,4 @@ services:
 volumes:
   redis_data:
   rabbitmq_data:
-```
 
-**Environment variables to set in Coolify:**
-```
-DB_PASSWORD=AVNS_tX4w6erHeU_O1e_pOE-
-DB_NAME=defaultdb
-POSTGRES_HOST=app-807a9868-54c1-4871-bfbd-504a8a4bba0a-do-user-244201-0.h.db.ondigitalocean.com
-POSTGRES_PORT=25060
-POSTGRES_USERNAME=doadmin
-POSTGRES_PASSWORD=AVNS_tX4w6erHeU_O1e_pOE-
