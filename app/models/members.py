@@ -9,6 +9,7 @@ class Member(Base):
     member_id: Mapped[str] = mapped_column(Text, primary_key=True, unique=True, nullable=False)
     expa_person_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True, unique=True)
     full_name: Mapped[str] = mapped_column(Text, nullable=False)
+    email:Mapped[str]= mapped_column(Text,nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     function: Mapped[str] = mapped_column(Text, nullable=True)
     reports_to_member_id: Mapped[Optional[str]] = mapped_column(

@@ -132,6 +132,7 @@ def upsert_members(db: Session, rows: List[Dict[str, Any]]) -> int:
         set_={
             "full_name": stmt.excluded.full_name,
             "expa_person_id": stmt.excluded.expa_person_id,
+            "email": stmt.excluded.email,
             "role": stmt.excluded.role,
             "function": stmt.excluded.function,
             "reports_to_member_id": stmt.excluded.reports_to_member_id,

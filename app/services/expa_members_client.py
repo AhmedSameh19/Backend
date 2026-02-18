@@ -28,6 +28,7 @@ query MemberPositionList($home_lc_id: Int, $from: DateTime, $to: DateTime) {
       person {
         id
         full_name
+        email
       }
       function {
         name

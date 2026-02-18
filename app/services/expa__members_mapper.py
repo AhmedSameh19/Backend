@@ -10,6 +10,7 @@ def members_to_rows(members: List[Dict[str, Any]],home_lc_id: int, home_mc_id: i
             "expa_person_id": str(member.get("person", {}).get("id")),
             "full_name": member.get("person", {}).get("full_name") or "",
             "role": member.get("role", {}).get("name", ""),
+            "email": member.get("person", {}).get("email"),
             "function": member.get("function", {}).get("name"),
             "reports_to_member_id": (
                 str(member.get("reports_to_position_id"))

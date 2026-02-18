@@ -105,6 +105,7 @@ class Settings:
     EXPA_ICX_PROGRAMMES: List[int]
     EXPA_ICX_HOST_LC_IDS: List[int]
     EXPA_ICX_REALIZED_FROM: str
+<<<<<<< HEAD
     CORS_ORIGINS: List[str]
 
     # Podio
@@ -122,6 +123,15 @@ class Settings:
     GOOGLE_CLIENT_ID: Optional[str]
     GOOGLE_CLIENT_SECRET: Optional[str]
     GOOGLE_CALENDAR_REDIRECT_URI: Optional[str]
+
+    # Email (SMTP)
+    SMTP_HOST: str
+    SMTP_PORT: int
+    SMTP_USER: str
+    SMTP_PASSWORD: str
+    SMTP_FROM_EMAIL: str
+    SMTP_FROM_NAME: str
+    SMTP_USE_TLS: bool
 
     @staticmethod
     def from_env() -> "Settings":
@@ -194,6 +204,13 @@ class Settings:
             GOOGLE_CLIENT_ID=_env("GOOGLE_CLIENT_ID"),
             GOOGLE_CLIENT_SECRET=_env("GOOGLE_CLIENT_SECRET"),
             GOOGLE_CALENDAR_REDIRECT_URI=_env("GOOGLE_CALENDAR_REDIRECT_URI"),
+            SMTP_HOST=_env("SMTP_HOST", "smtp.gmail.com") or "smtp.gmail.com",
+            SMTP_PORT=_env_int("SMTP_PORT", 587),
+            SMTP_USER=_env("SMTP_USER", "") or "",
+            SMTP_PASSWORD=_env("SMTP_PASSWORD", "") or "",
+            SMTP_FROM_EMAIL=_env("SMTP_FROM_EMAIL", "") or "",
+            SMTP_FROM_NAME=_env("SMTP_FROM_NAME", "AIESEC CRM") or "AIESEC CRM",
+            SMTP_USE_TLS=(_env("SMTP_USE_TLS", "true") or "true").lower() in ("true", "1", "yes"),
         )
 
 
