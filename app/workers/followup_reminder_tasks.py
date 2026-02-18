@@ -69,7 +69,6 @@ def _process_followups(db, now_start, now_end) -> dict:
         .where(
             and_(
                 ExpaLeadFollowUp.status == "pending",
-                ExpaLeadFollowUp.follow_up_at >= now_start,
                 ExpaLeadFollowUp.follow_up_at < now_end,
             )
         )
@@ -107,7 +106,6 @@ def _process_followups(db, now_start, now_end) -> dict:
         .where(
             and_(
                 ExpaICXLeadFollowUp.status == "pending",
-                ExpaICXLeadFollowUp.follow_up_at >= now_start,
                 ExpaICXLeadFollowUp.follow_up_at < now_end,
             )
         )
