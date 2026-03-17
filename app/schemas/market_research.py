@@ -18,11 +18,23 @@ class MarketResearchItem(BaseModel):
     company_name: Optional[str] = Field(None, description="Company name")
     product: Optional[str] = Field(None, description="Product")
     sub_project_igv: Optional[str] = Field(None, description="Sub-project (IGV)")
-    local_committee: Optional[str] = Field(None, description="Local committee")
+    local_committee: Optional[str] = Field(None, description="Local committee (display name)")
+    local_committee_id: Optional[int] = Field(None, description="Local committee Podio option id for filtering")
     type_of_pr_deal: Optional[str] = Field(None, description="Type of PR deal")
     reason_of_approach: Optional[str] = Field(None, description="Reason of approach")
     item_id: Optional[int] = Field(None, description="Podio item ID")
-    
+    # Company info (try common Podio field external IDs)
+    industry: Optional[str] = Field(None, description="Industry")
+    size: Optional[str] = Field(None, description="Company size")
+    address: Optional[str] = Field(None, description="Address")
+    website: Optional[str] = Field(None, description="Website")
+    # Contact person
+    contact_person_name: Optional[str] = Field(None, description="Contact person name")
+    contact_position: Optional[str] = Field(None, description="Contact position")
+    contact_email: Optional[str] = Field(None, description="Contact email")
+    contact_phone: Optional[str] = Field(None, description="Contact phone")
+    contact_linkedin: Optional[str] = Field(None, description="Contact LinkedIn")
+
     class Config:
         from_attributes = True
 
@@ -54,6 +66,11 @@ class MarketResearchSubmitResponse(BaseModel):
     item_id: int = Field(..., description="Podio item ID")
     success: bool = Field(True, description="Whether submission was successful")
     message: str = Field("Successfully submitted to Podio", description="Response message")
+
+
+class CompanyAssignRequest(BaseModel):
+    """Request body for assigning a market research company to a member (EXPA person ID)."""
+    member_id: str = Field(..., min_length=1, description="EXPA person ID of the member to assign")
 
 
 class IGVMarketResearchCreate(BaseModel):
@@ -111,14 +128,21 @@ class MarketResearchStatusUpdate(BaseModel):
 
 
 class ScheduledVisitOut(BaseModel):
-    """Scheduled company visit for calendar (IGV or B2B with visit_date set)."""
+    """Scheduled company visit for calendar (IGV, B2B, or Podio with visit_date set)."""
     id: int
     company_name: Optional[str] = None
     visit_date: datetime
-    source: str = Field(..., description="'igv' or 'b2b'")
+    source: str = Field(..., description="'igv', 'b2b', or 'podio'")
 
     class Config:
         from_attributes = True
+
+
+class PodioScheduledVisitCreate(BaseModel):
+    """Create or update a scheduled visit for a Podio market research item."""
+    podio_item_id: int = Field(..., description="Podio item ID")
+    company_name: str = Field(..., min_length=1, description="Company name")
+    visit_date: datetime = Field(..., description="Scheduled visit date")
 
 
 class IGVMarketResearchOut(BaseModel):

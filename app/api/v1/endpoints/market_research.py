@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import re
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -11,19 +14,23 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.market_research.igv import IGVMarketResearch
 from app.models.market_research.b2b_market_research import B2BMarketResearch
+from app.models.market_research.podio_scheduled_visit import PodioScheduledVisit
 from app.services.podio_client import PodioClient
+from app.models.members import Member
 from app.schemas.market_research import (
     MarketResearchItem,
     MarketResearchListResponse,
     IGVMarketResearchSubmit,
     B2BMarketResearchSubmit,
     MarketResearchSubmitResponse,
+    CompanyAssignRequest,
     IGVMarketResearchCreate,
     B2BMarketResearchCreate,
     IGVMarketResearchOut,
     B2BMarketResearchOut,
     MarketResearchStatusUpdate,
     ScheduledVisitOut,
+    PodioScheduledVisitCreate,
 )
 
 router = APIRouter()
@@ -36,13 +43,11 @@ def get_podio_client() -> PodioClient:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Podio credentials not configured. Please set PODIO_CLIENT_ID, PODIO_CLIENT_SECRET, PODIO_APP_ID, and PODIO_APP_TOKEN environment variables.",
         )
-    
     if not settings.PODIO_APP_ID or not settings.PODIO_APP_TOKEN:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Podio app credentials not configured. Please set PODIO_APP_ID and PODIO_APP_TOKEN environment variables. Make sure the app_token matches the app_id.",
         )
-    
     return PodioClient(
         client_id=settings.PODIO_CLIENT_ID,
         client_secret=settings.PODIO_CLIENT_SECRET,
@@ -51,107 +56,360 @@ def get_podio_client() -> PodioClient:
     )
 
 
+def _dict_to_display_text(d: dict) -> Optional[str]:
+    """Extract user-facing text from a Podio category/dict value. Never return raw dict string."""
+    if not isinstance(d, dict):
+        return None
+    if "text" in d and d.get("text"):
+        return str(d["text"])
+    if "name" in d and d.get("name"):
+        return str(d["name"])
+    inner = d.get("value")
+    if isinstance(inner, dict):
+        return _dict_to_display_text(inner)
+    if inner is not None:
+        return str(inner)
+    return None
+
+
+def _field_value_to_str(field: dict) -> Optional[str]:
+    """Convert Podio field's first value to string. Handles category (text), link (embed.url), etc."""
+    values = field.get("values", [])
+    if not values:
+        return None
+    value = values[0]
+    if isinstance(value, dict):
+        display = _dict_to_display_text(value)
+        if display:
+            return display
+        # Podio link/embed type: embed has resolved_url, url, or original_url
+        embed = value.get("embed") or value.get("link")
+        if isinstance(embed, dict):
+            url = embed.get("resolved_url") or embed.get("url") or embed.get("original_url")
+            if url:
+                return str(url)
+        if "url" in value:
+            return str(value.get("url"))
+        return None  # avoid returning raw dict string
+    return str(value) if value is not None else None
+
+
 def extract_field_value(item: dict, field_external_id: str) -> Optional[str]:
     """Extract value from Podio item field by external ID"""
     if not isinstance(item, dict):
         return None
-    fields = item.get("fields", [])
-    for field in fields:
+    for field in item.get("fields", []):
         if field.get("external_id") == field_external_id:
-            values = field.get("values", [])
-            if values:
-                # Handle different field types
-                value = values[0]
-                if isinstance(value, dict):
-                    # For category fields: extract 'text' or 'value' or 'name'
-                    # Category format: {'id': 7, 'status': 'active', 'text': 'B2B', 'color': 'DCEBD8'}
-                    if "text" in value:
-                        return value.get("text")
-                    elif "value" in value:
-                        return str(value.get("value"))
-                    elif "name" in value:
-                        return value.get("name")
-                    # If none of the above, try to get a string representation
-                    return str(value)
-                # For simple string/number values
-                return str(value)
+            v = _field_value_to_str(field)
+            if v and str(v).strip():
+                return v
+    return None
+
+
+def _field_value_to_id(field: dict) -> Optional[int]:
+    """Extract Podio category option id from field's first value. Category values are like {"value": 123, "text": "..."}."""
+    values = field.get("values", [])
+    if not values:
+        return None
+    value = values[0]
+    if isinstance(value, dict):
+        opt_id = value.get("value") or value.get("id")
+        if opt_id is not None:
+            return int(opt_id) if isinstance(opt_id, (int, float)) else None
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    return None
+
+
+def extract_field_value_id(item: dict, field_external_id: str) -> Optional[int]:
+    """Extract category option id from Podio item field by external ID."""
+    if not isinstance(item, dict):
+        return None
+    for field in item.get("fields", []):
+        if field.get("external_id") == field_external_id:
+            opt_id = _field_value_to_id(field)
+            if opt_id is not None:
+                return opt_id
+    return None
+
+
+def get_field_id_by_keyword(item: dict, *keywords: str) -> Optional[int]:
+    """Find first Podio field by keyword and return its category option id."""
+    if not isinstance(item, dict):
+        return None
+    keywords_norm = [k.lower().replace("-", "_").replace(" ", "_") for k in keywords]
+    for field in item.get("fields", []):
+        eid = (field.get("external_id") or "")
+        eid_norm = eid.lower().replace("-", "_").replace(" ", "_")
+        if any(kw in eid_norm or kw in eid.lower() for kw in keywords_norm):
+            opt_id = _field_value_to_id(field)
+            if opt_id is not None:
+                return opt_id
+    return None
+
+
+def _first_id(*candidates: Optional[int]) -> Optional[int]:
+    """Return the first non-None int."""
+    for c in candidates:
+        if c is not None:
+            return c
+    return None
+
+
+def get_field_by_keyword(item: dict, *keywords: str) -> Optional[str]:
+    """
+    Find first Podio field whose external_id (normalized) contains any of the keywords.
+    Use when exact external_id is unknown. E.g. get_field_by_keyword(item, "industry", "sector").
+    """
+    if not isinstance(item, dict):
+        return None
+    keywords_norm = [k.lower().replace("-", "_").replace(" ", "_") for k in keywords]
+    for field in item.get("fields", []):
+        eid = (field.get("external_id") or "")
+        eid_norm = eid.lower().replace("-", "_").replace(" ", "_")
+        if any(kw in eid_norm or kw in eid.lower() for kw in keywords_norm):
+            v = _field_value_to_str(field)
+            if v and str(v).strip():
+                return v
+    return None
+
+
+def _first(*candidates: Optional[str]) -> Optional[str]:
+    """Return the first non-empty value or None."""
+    for c in candidates:
+        if c and str(c).strip():
+            return c
     return None
 
 
 def map_podio_item_to_market_research(item: dict) -> MarketResearchItem:
-    """Map Podio item to MarketResearchItem schema"""
-    # Note: You'll need to replace these field_external_id values with your actual Podio field external IDs
-    # These are placeholders - adjust based on your Podio app structure
-    
-    # Podio uses 'item_id' or 'app_item_id' for the item identifier
+    """Map Podio item to MarketResearchItem schema.
+    Tries explicit external IDs first, then keyword match on field external_id.
+    """
     item_id = item.get("item_id") or item.get("app_item_id")
-    
     return MarketResearchItem(
-        company_name=extract_field_value(item, "company-name") or extract_field_value(item, "company_name"),
-        product=extract_field_value(item, "product") or extract_field_value(item, "PRODUCT"),
-        sub_project_igv=extract_field_value(item, "sub-project-igv") or extract_field_value(item, "sub_project") or extract_field_value(item, "igv"),
-        local_committee=extract_field_value(item, "local-committee") or extract_field_value(item, "local_committee") or extract_field_value(item, "lc"),
-        type_of_pr_deal=extract_field_value(item, "type-of-pr-deal") or extract_field_value(item, "type_of_pr_deal") or extract_field_value(item, "pr_deal_type"),
-        reason_of_approach=extract_field_value(item, "reason-of-approach") or extract_field_value(item, "reason_of_approach"),
+        company_name=_first(
+            extract_field_value(item, "company-name"),
+            extract_field_value(item, "company_name"),
+            get_field_by_keyword(item, "company-name", "company_name", "companyname"),
+        ),
+        product=_first(
+            extract_field_value(item, "product"),
+            extract_field_value(item, "PRODUCT"),
+            get_field_by_keyword(item, "product"),
+        ),
+        sub_project_igv=_first(
+            extract_field_value(item, "sub-project-igv"),
+            extract_field_value(item, "sub_project"),
+            extract_field_value(item, "igv"),
+            get_field_by_keyword(item, "sub_project", "igv", "sub-project"),
+        ),
+        local_committee=_first(
+            extract_field_value(item, "status"),  # your app uses "status" for LC (e.g. 6th October University)
+            extract_field_value(item, "local-committee"),
+            extract_field_value(item, "local_committee"),
+            extract_field_value(item, "lc"),
+            get_field_by_keyword(item, "local", "committee", "lc"),
+        ),
+        local_committee_id=_first_id(
+            extract_field_value_id(item, "status"),
+            extract_field_value_id(item, "local-committee"),
+            extract_field_value_id(item, "local_committee"),
+            extract_field_value_id(item, "lc"),
+            get_field_id_by_keyword(item, "local", "committee", "lc"),
+        ),
+        type_of_pr_deal=_first(
+            extract_field_value(item, "type-of-pr-deal"),
+            extract_field_value(item, "type_of_pr_deal"),
+            extract_field_value(item, "pr_deal_type"),
+            get_field_by_keyword(item, "type", "pr", "deal"),
+        ),
+        reason_of_approach=_first(
+            extract_field_value(item, "reason-of-approach"),
+            extract_field_value(item, "reason_of_approach"),
+            get_field_by_keyword(item, "reason", "approach"),
+        ),
         item_id=item_id,
+        industry=_first(
+            extract_field_value(item, "industry"),
+            extract_field_value(item, "company-industry"),
+            extract_field_value(item, "company_industry"),
+            get_field_by_keyword(item, "industry", "sector"),
+        ),
+        size=_first(
+            extract_field_value(item, "size"),
+            extract_field_value(item, "company-size"),
+            extract_field_value(item, "company_size"),
+            extract_field_value(item, "employee-size"),
+            get_field_by_keyword(item, "size", "employee", "company-size"),
+        ),
+        address=_first(
+            extract_field_value(item, "address"),
+            extract_field_value(item, "company-address"),
+            extract_field_value(item, "location"),
+            get_field_by_keyword(item, "address", "location", "company-address"),
+        ),
+        website=_first(
+            extract_field_value(item, "link"),  # your app: link field (embed url)
+            extract_field_value(item, "website"),
+            extract_field_value(item, "company-website"),
+            extract_field_value(item, "url"),
+            get_field_by_keyword(item, "website", "url", "web", "link"),
+        ),
+        contact_person_name=_first(
+            extract_field_value(item, "contact-at-company"),  # your app
+            extract_field_value(item, "account-manager-name"),  # your app
+            extract_field_value(item, "contact-person"),
+            extract_field_value(item, "contact_person"),
+            extract_field_value(item, "contact name"),
+            extract_field_value(item, "person-name"),
+            get_field_by_keyword(item, "contact", "person", "name", "contact-person"),
+        ),
+        contact_position=_first(
+            extract_field_value(item, "position"),
+            extract_field_value(item, "contact-position"),
+            extract_field_value(item, "contact_position"),
+            get_field_by_keyword(item, "position", "title", "job"),
+        ),
+        contact_email=_first(
+            extract_field_value(item, "email"),  # your app
+            extract_field_value(item, "account-mnagaer-email"),  # your app (Podio typo)
+            extract_field_value(item, "contact-email"),
+            extract_field_value(item, "contact_email"),
+            get_field_by_keyword(item, "email", "mail"),
+        ),
+        contact_phone=_first(
+            extract_field_value(item, "companys-responsible-contact"),  # your app
+            extract_field_value(item, "phone"),
+            extract_field_value(item, "contact-phone"),
+            extract_field_value(item, "contact_phone"),
+            extract_field_value(item, "telephone"),
+            get_field_by_keyword(item, "phone", "tel", "mobile", "number", "responsible", "contact"),
+        ),
+        contact_linkedin=_first(
+            extract_field_value(item, "linkedin"),
+            extract_field_value(item, "contact-linkedin"),
+            extract_field_value(item, "linkedin-url"),
+            get_field_by_keyword(item, "linkedin", "linked-in"),
+        ),
     )
 
 
-@router.get("", response_model=MarketResearchListResponse, tags=["market-research"])
-async def get_market_research(
-    limit: int = Query(500, ge=1, le=500, description="Maximum number of items to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination"),
+@router.get("/podio-fields", tags=["market-research"])
+async def get_podio_field_ids(
     podio_client: PodioClient = Depends(get_podio_client),
 ):
     """
-    Fetch market research data from Podio
-    
-    Returns a list of market research items containing:
-    - Company name
-    - Product
-    - Sub-project (IGV)
-    - Local committee
-    - Type of PR deal
-    - Reason of approach
+    Return external_id and sample value for each field in the first Podio item.
+    Use this to see your app's field IDs and add them to the mapping if needed.
     """
     try:
-        items = podio_client.get_app_items(
-            limit=limit,
-            offset=offset,
-        )
-        
-        # Filter out non-dict items and map valid items
-        mapped_items = [
-            map_podio_item_to_market_research(item) 
-            for item in items 
-            if isinstance(item, dict)
-        ]
-        
-        return MarketResearchListResponse(
-            items=mapped_items,
-            total=len(mapped_items),
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-    except requests.exceptions.RequestException as e:
-        error_detail = f"Error fetching data from Podio: {str(e)}"
-        if hasattr(e, "response") and e.response is not None:
-            try:
-                error_data = e.response.json()
-                error_detail = error_data.get("error_description", error_data.get("error", error_detail))
-            except:
-                error_detail = e.response.text or error_detail
+        items = podio_client.get_app_items(limit=1, offset=0)
+        if not items or not isinstance(items[0], dict):
+            return {"message": "No items in Podio app", "fields": []}
+        item = items[0]
+        fields_out = []
+        for field in item.get("fields", []):
+            eid = field.get("external_id")
+            fid = field.get("field_id")
+            val = _field_value_to_str(field)
+            val_id = _field_value_to_id(field)
+            fields_out.append({
+                "field_id": fid,
+                "external_id": eid,
+                "sample_value": val,
+                "sample_value_id": val_id,
+            })
+        return {"message": "Field IDs from first item. For LC filter: set PODIO_MARKET_RESEARCH_LC_FIELD_ID to field_id of Local Committee; set PODIO_LC_OPTION_IDS to {\"<lc_id>\": [<sample_value_id>, ...]} for each LC.", "fields": fields_out}
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=error_detail,
+            detail=f"Could not fetch Podio fields: {str(e)}",
+        )
+
+
+@router.get("/podio-form-url", tags=["market-research"])
+def get_podio_form_url():
+    """Return the Podio webform URL so the frontend can open it in the browser (e.g. redirect button)."""
+    return {"url": settings.PODIO_WEBFORM_URL}
+
+
+@router.get("/podio-lc-options", tags=["market-research"])
+async def get_podio_lc_options(
+    field_id: Optional[int] = Query(None, description="Podio field_id of the LC/status category field"),
+    external_id: Optional[str] = Query("status", description="Podio external_id of the LC field (e.g. status)"),
+    podio_client: PodioClient = Depends(get_podio_client),
+):
+    """
+    Return all options of the Podio LC (status) category field and a suggested PODIO_LC_OPTION_IDS
+    mapping for all entity LCs. Use this to configure filtering for all 19 LCs at once.
+
+    Either set field_id (from podio-fields) or use external_id (default "status"). 
+    Response includes options (id, text) and suggested_podio_lc_option_ids: map of lc_id -> [option_id].
+    """
+    try:
+        field_ref = field_id if field_id is not None else (external_id or "status")
+        field_config = podio_client.get_app_field(field_ref)
+        fid = field_config.get("field_id")
+        eid = field_config.get("external_id")
+        field_type = field_config.get("type", "")
+        config = field_config.get("config") or {}
+        podio_settings = config.get("settings") or {}
+        options_raw = podio_settings.get("options") if isinstance(podio_settings, dict) else []
+        options = []
+        for opt in options_raw or []:
+            if not isinstance(opt, dict):
+                continue
+            if opt.get("status") == "deleted":
+                continue
+            options.append({
+                "id": opt.get("id"),
+                "text": (opt.get("text") or "").strip(),
+                "status": opt.get("status"),
+            })
+
+        # Build suggested mapping: lc_id -> [option_id] by matching option text to EXPA_LC_NAMES
+        suggested: Dict[str, List[int]] = {}
+        lc_names = getattr(settings, "EXPA_LC_NAMES", None) or {}
+        for opt in options:
+            opt_id = opt.get("id")
+            text = (opt.get("text") or "").strip()
+            if not text or opt_id is None:
+                continue
+            text_lower = text.lower()
+            for lc_id_key, lc_name in (lc_names or {}).items():
+                if not isinstance(lc_name, str):
+                    continue
+                name_lower = lc_name.strip().lower()
+                if text_lower == name_lower:
+                    key = str(lc_id_key)
+                    if key not in suggested:
+                        suggested[key] = []
+                    if opt_id not in suggested[key]:
+                        suggested[key].append(int(opt_id))
+                # Allow "Alex" -> Alexandria
+                if name_lower == "alexandria" and text_lower == "alex":
+                    key = "899"
+                    if key not in suggested:
+                        suggested[key] = []
+                    if opt_id not in suggested[key]:
+                        suggested[key].append(int(opt_id))
+
+        return {
+            "field_id": fid,
+            "external_id": eid,
+            "type": field_type,
+            "options": options,
+            "suggested_podio_lc_option_ids": suggested,
+            "message": "Set PODIO_MARKET_RESEARCH_LC_FIELD_ID to field_id above. Set PODIO_LC_OPTION_IDS to the suggested_podio_lc_option_ids JSON (copy as one line for .env).",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not fetch Podio LC options: {str(e)}",
         )
 
 
@@ -160,7 +418,7 @@ def get_scheduled_visits(
     db: Session = Depends(get_db),
 ):
     """
-    List IGV and B2B market research records that have a visit_date set (for calendar display).
+    List IGV, B2B, and Podio scheduled visits (for calendar display and Google sync).
     """
     out: List[ScheduledVisitOut] = []
     igv_rows = db.execute(
@@ -173,23 +431,224 @@ def get_scheduled_visits(
     ).scalars().all()
     for row in b2b_rows:
         out.append(ScheduledVisitOut(id=row.id, company_name=row.company_name, visit_date=row.visit_date, source="b2b"))
+    podio_rows = db.execute(select(PodioScheduledVisit)).scalars().all()
+    for row in podio_rows:
+        out.append(ScheduledVisitOut(id=row.id, company_name=row.company_name, visit_date=row.visit_date, source="podio"))
     return out
 
 
-@router.get("/{item_id}", response_model=MarketResearchItem, tags=["market-research"])
-async def get_market_research_item(
-    item_id: int,
+@router.get("/scheduled-visits/podio/{podio_item_id}", tags=["market-research"])
+def get_podio_scheduled_visit(
+    podio_item_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get scheduled visit date for a Podio item (for company card)."""
+    row = db.execute(
+        select(PodioScheduledVisit).where(PodioScheduledVisit.podio_item_id == podio_item_id)
+    ).scalars().first()
+    if not row:
+        return {"visit_date": None}
+    return {"visit_date": row.visit_date.isoformat(), "id": row.id}
+
+
+@router.post("/scheduled-visits", status_code=status.HTTP_201_CREATED, tags=["market-research"])
+def create_or_update_podio_scheduled_visit(
+    payload: PodioScheduledVisitCreate,
+    db: Session = Depends(get_db),
+):
+    """Create or update a scheduled visit for a Podio market research item. Used by company card date picker."""
+    existing = db.execute(
+        select(PodioScheduledVisit).where(PodioScheduledVisit.podio_item_id == payload.podio_item_id)
+    ).scalars().first()
+    try:
+        if existing:
+            existing.company_name = payload.company_name
+            existing.visit_date = payload.visit_date
+            existing.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(existing)
+            return {"id": existing.id, "visit_date": existing.visit_date.isoformat(), "updated": True}
+        else:
+            row = PodioScheduledVisit(
+                podio_item_id=payload.podio_item_id,
+                company_name=payload.company_name,
+                visit_date=payload.visit_date,
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return {"id": row.id, "visit_date": row.visit_date.isoformat(), "updated": False}
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database error: " + str(e),
+        )
+
+
+@router.get("", response_model=MarketResearchListResponse, tags=["market-research"])
+async def get_market_research(
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of items to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    lc_id: Optional[int] = Query(None, description="Filter by LC id (EXPA/LC_CODES id); only items for this LC are returned"),
     podio_client: PodioClient = Depends(get_podio_client),
 ):
-    """Get a single market research item by Podio item ID"""
+    """
+    Fetch market research data from Podio.
+    When lc_id is provided, only items whose local committee matches that LC are returned.
+    If PODIO_MARKET_RESEARCH_LC_FIELD_ID and PODIO_LC_OPTION_IDS are set, uses Podio filter API (fast).
+    Otherwise fetches a page and filters in memory (fallback).
+    """
     try:
-        item = podio_client.get_item(item_id)
-        return map_podio_item_to_market_research(item)
+        use_podio_filter = (
+            lc_id is not None
+            and getattr(settings, "PODIO_MARKET_RESEARCH_LC_FIELD_ID", None) is not None
+            and getattr(settings, "PODIO_LC_OPTION_IDS", None) is not None
+        )
+        option_ids: Optional[List[int]] = None
+        if use_podio_filter and settings.PODIO_LC_OPTION_IDS:
+            option_ids = settings.PODIO_LC_OPTION_IDS.get(str(lc_id)) or settings.PODIO_LC_OPTION_IDS.get(str(int(lc_id)))
+            if not option_ids:
+                use_podio_filter = False
+
+        if use_podio_filter and settings.PODIO_MARKET_RESEARCH_LC_FIELD_ID is not None and option_ids:
+            # Fast path: Podio returns only matching items (small payload, no timeout from huge fetch).
+            filter_key = str(settings.PODIO_MARKET_RESEARCH_LC_FIELD_ID)
+            items = podio_client.get_app_items_filtered(
+                filters={filter_key: option_ids},
+                limit=limit,
+                offset=offset,
+            )
+            mapped_items = [
+                map_podio_item_to_market_research(item)
+                for item in items
+                if isinstance(item, dict)
+            ]
+        else:
+            # Fallback: fetch page then filter by LC name in memory (or no lc_id = show all for this page).
+            items = podio_client.get_app_items(
+                limit=limit,
+                offset=offset,
+            )
+            mapped_items = [
+                map_podio_item_to_market_research(item)
+                for item in items
+                if isinstance(item, dict)
+            ]
+            before_filter = len(mapped_items)
+            lc_name_used = None
+            allowed_list = None
+            sample_lc_in_podio = list({(m.local_committee or "").strip() for m in mapped_items[:100] if m.local_committee})[:15]
+            if lc_id is not None and getattr(settings, "EXPA_LC_NAMES", None):
+                lc_names = settings.EXPA_LC_NAMES
+                lc_name_used = lc_names.get(lc_id) or (lc_names.get(int(lc_id)) if lc_id is not None else None)
+                if lc_name_used and isinstance(lc_name_used, str):
+                    match = lc_name_used.strip().lower()
+                    allowed = {match}
+                    if match == "alexandria":
+                        allowed.add("alex")
+                    allowed_list = list(allowed)
+                    mapped_items = [m for m in mapped_items if m.local_committee and m.local_committee.strip().lower() in allowed]
+
+        return MarketResearchListResponse(
+            items=mapped_items,
+            total=len(mapped_items),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except requests.exceptions.RequestException as e:
+        error_detail = f"Error fetching data from Podio: {str(e)}"
+        if hasattr(e, "response") and e.response is not None:
+            try:
+                error_data = e.response.json()
+                error_detail = error_data.get("error_description", error_data.get("error", error_detail))
+            except Exception:
+                error_detail = e.response.text or error_detail
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=error_detail,
+        )
+
+
+def _rewrite_html_urls(html: str, base_url: str) -> str:
+    """Rewrite relative URLs in HTML to absolute URLs for the given base."""
+    base = base_url.rstrip("/")
+    # Rewrite href="/path" and src="/path" (but not // or http)
+    def replace(m: re.Match) -> str:
+        attr, val = m.group(1), m.group(2)
+        if val.startswith("//") or val.startswith("http") or val.startswith("mailto:") or val.startswith("#"):
+            return m.group(0)
+        if val.startswith("/"):
+            return f'{attr}="{base}{val}"'
+        return m.group(0)
+    html = re.sub(r'(href|src|action)=["\']([^"\']+)["\']', replace, html)
+    return html
+
+
+@router.get("/podio-form-proxy", response_class=HTMLResponse, tags=["market-research"])
+def get_podio_form_proxy():
+    """
+    Proxy the Podio webform to bypass X-Frame-Options for iframe embedding.
+    Fetches the form from Podio and returns it without frame-blocking headers.
+    """
+    form_url = settings.PODIO_WEBFORM_URL
+    try:
+        resp = requests.get(
+            form_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        html = resp.text
+        base = "https://podio.com"
+        html = _rewrite_html_urls(html, base)
+        # Allow embedding in iframe from our frontend origins (no X-Frame-Options; use CSP)
+        return HTMLResponse(
+            content=html,
+            headers={
+                "Content-Security-Policy": "frame-ancestors 'self' http://localhost:3000 http://localhost:5173 https://localhost:3000 https://localhost:5173",
+            },
+        )
     except requests.exceptions.RequestException as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND if e.response and e.response.status_code == 404 else status.HTTP_502_BAD_GATEWAY,
-            detail=f"Error fetching item from Podio: {str(e)}",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch Podio form: {str(e)}",
         )
+
+
+@router.patch("/companies/{item_id}/assign", status_code=status.HTTP_200_OK, tags=["market-research"])
+def assign_company_to_member(
+    item_id: int,
+    payload: CompanyAssignRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Assign a market research company to a member (local only; no Podio update).
+    Member is resolved from the EXPA-backed members table. Assignment is persisted
+    in the frontend (e.g. localStorage).
+    """
+    member = (
+        db.execute(select(Member).where(Member.expa_person_id == payload.member_id))
+        .scalars()
+        .first()
+    )
+    if not member:
+        member = db.get(Member, payload.member_id)
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return {
+        "ok": True,
+        "assigned_to": {"member_id": payload.member_id, "member_name": member.full_name},
+    }
 
 
 def build_podio_fields(data: Dict[str, Any], field_mapping: Dict[str, str]) -> List[Dict[str, Any]]:
@@ -446,5 +905,21 @@ def update_b2b_market_research_status(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database error: " + str(e),
+        )
+
+
+@router.get("/{item_id}", response_model=MarketResearchItem, tags=["market-research"])
+async def get_market_research_item(
+    item_id: int,
+    podio_client: PodioClient = Depends(get_podio_client),
+):
+    """Get a single market research item by Podio item ID. Defined last so static paths (e.g. /podio-lc-options) match first."""
+    try:
+        item = podio_client.get_item(item_id)
+        return map_podio_item_to_market_research(item)
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND if e.response and e.response.status_code == 404 else status.HTTP_502_BAD_GATEWAY,
+            detail=f"Error fetching item from Podio: {str(e)}",
         )
 

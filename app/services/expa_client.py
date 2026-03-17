@@ -40,6 +40,15 @@ query People($home_committee: [Int], $from: DateTime, $to: DateTime, $per_page: 
   }
 }
 """
+CURRENT_PERSON_QUERY = """
+query {
+  current_person {
+    id
+    full_name
+    home_lc { id name }
+  }
+}
+"""
 MEMBERS_QUERY="""
 query MemberPositionList($home_lc_id: Int, $from: DateTime, $to: DateTime) {
   memberPositions(
@@ -123,6 +132,20 @@ class ExpaClient:
 
         people = (((data.get("data") or {}).get("people") or {}).get("data")) or []
         return people if isinstance(people, list) else []
+
+    def fetch_current_person(self) -> Dict[str, Any] | None:
+        """Fetch current person from EXPA (requires user token in client)."""
+        resp = requests.post(
+            self.api_url,
+            json={"query": CURRENT_PERSON_QUERY},
+            headers=self._headers(),
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        data: Dict[str, Any] = resp.json()
+        if "errors" in data:
+            raise RuntimeError(f"EXPA GraphQL errors: {data['errors']}")
+        return (data.get("data") or {}).get("current_person")
     
     # To fetch all members of specific LC within date range
     def fetch_members(self, *, home_lc_id: int, from_date: str, to_date: str) -> List[Dict[str, Any]]:

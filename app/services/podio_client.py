@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import requests
 
@@ -136,6 +136,53 @@ class PodioClient:
         
         return all_items[:limit]
 
+    def get_app_items_filtered(
+        self,
+        app_id: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get items from a Podio app using the filter endpoint (POST).
+        Use this when filtering by field values (e.g. category) so Podio returns only
+        matching items — faster and smaller payload than get_app_items + in-memory filter.
+
+        Args:
+            app_id: Podio app ID (uses self.app_id if not provided)
+            filters: Dict mapping field_id (str) to filter value. For category fields
+                     use a list of option ids, e.g. {"123456": [option_id1, option_id2]}.
+            limit: Maximum number of items to return (default 100, max 500)
+            offset: Offset for pagination
+
+        Returns:
+            List of item dictionaries
+        """
+        access_token = self._get_access_token()
+        app_id = app_id or (int(self.app_id) if self.app_id else None)
+        if not app_id:
+            raise ValueError("app_id must be provided either as parameter or in client config")
+        if not filters:
+            return self.get_app_items(app_id=app_id, limit=limit, offset=offset)
+
+        url = f"{self.base_url}/item/app/{app_id}/filter/"
+        payload = {
+            "limit": min(limit, 500),
+            "offset": offset,
+            "filters": filters,
+            "remember": False,
+        }
+        resp = requests.post(
+            url,
+            headers=self._headers(access_token),
+            json=payload,
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        data: Dict[str, Any] = resp.json()
+        items = data.get("items") if isinstance(data, dict) else []
+        return list(items) if isinstance(items, list) else []
+
     def get_item(self, item_id: int) -> Dict[str, Any]:
         """Get a single item by ID"""
         access_token = self._get_access_token()
@@ -183,3 +230,59 @@ class PodioClient:
         resp.raise_for_status()
         return resp.json()
 
+    def update_item(
+        self,
+        item_id: int,
+        fields: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Update an existing Podio item's field values.
+
+        Args:
+            item_id: Podio item ID
+            fields: List of field dicts with 'external_id' and 'values' (array).
+                   Example: [{"external_id": "assigned-to", "values": ["expa_123"]}]
+
+        Returns:
+            Updated item dictionary
+        """
+        access_token = self._get_access_token()
+        url = f"{self.base_url}/item/{item_id}"
+        payload = {"fields": fields}
+        resp = requests.put(
+            url,
+            headers=self._headers(access_token),
+            json=payload,
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_app_field(
+        self,
+        field_id_or_external_id: Union[int, str],
+        app_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get a single field configuration from a Podio app.
+        Use this to get category options (e.g. LC list) for building PODIO_LC_OPTION_IDS.
+
+        Args:
+            field_id_or_external_id: Podio field_id (int) or external_id (str, e.g. "status")
+            app_id: Podio app ID (uses self.app_id if not provided)
+
+        Returns:
+            Field config dict with config.settings.options for category fields.
+        """
+        access_token = self._get_access_token()
+        app_id = app_id or (int(self.app_id) if self.app_id else None)
+        if not app_id:
+            raise ValueError("app_id must be provided either as parameter or in client config")
+        url = f"{self.base_url}/app/{app_id}/field/{field_id_or_external_id}"
+        resp = requests.get(
+            url,
+            headers=self._headers(access_token),
+            timeout=self.timeout_seconds,
+        )
+        resp.raise_for_status()
+        return resp.json()
