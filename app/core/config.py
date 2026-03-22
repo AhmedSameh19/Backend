@@ -165,7 +165,7 @@ class Settings:
             1609: "MC Egypt"
         }
 
-        _cors_raw = _env("CORS_ORIGINS", "https://accelerator.aiesec.org.eg/")
+        _cors_raw = _env("CORS_ORIGINS", "https://accelerator.aiesec.org.eg/,http://localhost:3000")
         cors_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 
         return Settings(
