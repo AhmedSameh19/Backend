@@ -73,6 +73,13 @@ def _env_csv_ints(name: str, default: List[int]) -> List[int]:
     return items or default
 
 
+def _normalize_origin(origin: str) -> str:
+    origin = origin.strip()
+    if origin == "*":
+        return origin
+    return origin.rstrip("/")
+
+
 @dataclass(frozen=True)
 class Settings:
     # Infrastructure (Celery)
@@ -165,8 +172,8 @@ class Settings:
             1609: "MC Egypt"
         }
 
-        _cors_raw = _env("CORS_ORIGINS", "https://accelerator.aiesec.org.eg/,http://localhost:3000")
-        cors_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+        _cors_raw = _env("CORS_ORIGINS", "https://accelerator.aiesec.org.eg,http://localhost:3000")
+        cors_origins = [_normalize_origin(o) for o in _cors_raw.split(",") if o.strip()]
 
         return Settings(
             RABBITMQ_URL=_env("RABBITMQ_URL"),
