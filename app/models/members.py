@@ -28,5 +28,6 @@ class Member(Base):
     )
     follow_ups_created = relationship(
         "ExpaLeadFollowUp",
-        passive_deletes=True
+        back_populates="created_by",
+        passive_deletes=True,
     )

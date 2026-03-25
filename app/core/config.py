@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
@@ -26,6 +27,36 @@ def _env_int(name: str, default: int) -> int:
         raise RuntimeError(f"{name} must be an int (got {raw!r})") from e
 
 
+def _env_int_optional(name: str) -> Optional[int]:
+    raw = _env(name)
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _env_json_lc_option_ids(name: str) -> Optional[Dict[str, List[int]]]:
+    """Parse env like PODIO_LC_OPTION_IDS='{"899":[123,456]}' -> {"899": [123, 456]}."""
+    raw = _env(name)
+    if not raw or not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None
+        out: Dict[str, List[int]] = {}
+        for k, v in data.items():
+            if isinstance(v, list):
+                out[str(k)] = [int(x) for x in v if isinstance(x, (int, float))]
+            elif isinstance(v, (int, float)):
+                out[str(k)] = [int(v)]
+        return out if out else None
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+
 def _env_csv_ints(name: str, default: List[int]) -> List[int]:
     raw = _env(name)
     if not raw:
@@ -40,6 +71,36 @@ def _env_csv_ints(name: str, default: List[int]) -> List[int]:
         except ValueError as e:
             raise RuntimeError(f"{name} must be comma-separated ints (bad value: {part!r})") from e
     return items or default
+
+
+def _env_int_optional(name: str) -> Optional[int]:
+    raw = _env(name)
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _env_json_lc_option_ids(name: str) -> Optional[Dict[str, List[int]]]:
+    """Parse env JSON like {"899": [123, 456]} for lc_id -> Podio category option ids."""
+    raw = _env(name)
+    if not raw or not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None
+        out: Dict[str, List[int]] = {}
+        for k, v in data.items():
+            if isinstance(v, list):
+                out[str(k)] = [int(x) for x in v if isinstance(x, (int, float))]
+            elif isinstance(v, (int, float)):
+                out[str(k)] = [int(v)]
+        return out if out else None
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -61,6 +122,23 @@ class Settings:
     EXPA_LC_CODES: List[int]
     EXPA_HOME_MC_ID: int
     EXPA_LC_NAMES: Optional[dict]
+    
+    # Podio
+    PODIO_CLIENT_ID: Optional[str]
+    PODIO_CLIENT_SECRET: Optional[str]
+    PODIO_APP_ID: Optional[str]
+    PODIO_APP_TOKEN: Optional[str]
+    PODIO_WEBFORM_URL: str  # For proxy embedding (e.g. https://podio.com/webforms/25879454/1936053)
+    PODIO_FIELD_ASSIGNED_TO: str  # Podio field external_id for "assigned to" (e.g. assigned-to)
+    # Optional: Podio filter by LC (faster than fetch-all then filter). Set to use POST /item/app/{id}/filter/
+    PODIO_MARKET_RESEARCH_LC_FIELD_ID: Optional[int]  # Podio field_id for Local Committee (category)
+    PODIO_LC_OPTION_IDS: Optional[Dict[str, List[int]]]  # e.g. {"899": [123, 456]} = lc_id 899 -> Podio category option ids
+
+    # Google Calendar
+    GOOGLE_CLIENT_ID: Optional[str]
+    GOOGLE_CLIENT_SECRET: Optional[str]
+    GOOGLE_CALENDAR_REDIRECT_URI: Optional[str]
+
     @staticmethod
     def from_env() -> "Settings":
         default_lc_codes = [
@@ -105,6 +183,20 @@ class Settings:
             EXPA_LC_CODES=_env_csv_ints("EXPA_LC_CODES", default_lc_codes),
             EXPA_LC_NAMES=default_lc_codes_names,
             EXPA_HOME_MC_ID=_env_int("EXPA_HOME_MC_ID", 1609),
+            PODIO_CLIENT_ID=_env("PODIO_CLIENT_ID"),
+            PODIO_CLIENT_SECRET=_env("PODIO_CLIENT_SECRET"),
+            PODIO_APP_ID=_env("PODIO_APP_ID"),
+            PODIO_APP_TOKEN=_env("PODIO_APP_TOKEN"),
+            PODIO_WEBFORM_URL=_env(
+                "PODIO_WEBFORM_URL",
+                "https://podio.com/webforms/25879454/1936053",
+            ) or "https://podio.com/webforms/25879454/1936053",
+            PODIO_FIELD_ASSIGNED_TO=_env("PODIO_FIELD_ASSIGNED_TO", "assigned-to") or "assigned-to",
+            PODIO_MARKET_RESEARCH_LC_FIELD_ID=_env_int_optional("PODIO_MARKET_RESEARCH_LC_FIELD_ID"),
+            PODIO_LC_OPTION_IDS=_env_json_lc_option_ids("PODIO_LC_OPTION_IDS"),
+            GOOGLE_CLIENT_ID=_env("GOOGLE_CLIENT_ID"),
+            GOOGLE_CLIENT_SECRET=_env("GOOGLE_CLIENT_SECRET"),
+            GOOGLE_CALENDAR_REDIRECT_URI=_env("GOOGLE_CALENDAR_REDIRECT_URI"),
         )
 
 
