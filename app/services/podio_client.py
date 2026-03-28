@@ -1,3 +1,4 @@
+"""Podio REST client used by market research endpoints."""
 from __future__ import annotations
 
 from dataclasses import dataclass

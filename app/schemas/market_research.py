@@ -1,3 +1,4 @@
+"""Pydantic schemas for market research list items, visits, and submissions."""
 from __future__ import annotations
 
 from datetime import datetime

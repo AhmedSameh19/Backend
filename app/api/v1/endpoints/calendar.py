@@ -1,4 +1,4 @@
-"""Google Calendar OAuth and events endpoints."""
+"""Google Calendar OAuth, connection status, and events for the CRM calendar page."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
