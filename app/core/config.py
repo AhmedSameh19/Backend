@@ -86,7 +86,10 @@ class Settings:
     RABBITMQ_URL: Optional[str]
     REDIS_URL: Optional[str]
 
-    # CORS
+    # URLs
+    FRONTEND_URL: str
+    BACKEND_URL: str
+
     CORS_ORIGINS: List[str]
 
     # Database
@@ -173,9 +176,14 @@ class Settings:
         _cors_raw = _env("CORS_ORIGINS", "https://accelerator.aiesec.org.eg,http://localhost:3000")
         cors_origins = [_normalize_origin(o) for o in _cors_raw.split(",") if o.strip()]
 
+        frontend_url = _env("FRONTEND_URL", "https://accelerator.aiesec.org.eg").rstrip("/")
+        backend_url = _env("BACKEND_URL", "https://api-accelerator.aiesec.org.eg").rstrip("/")
+
         return Settings(
             RABBITMQ_URL=_env("RABBITMQ_URL"),
             REDIS_URL=_env("REDIS_URL"),
+            FRONTEND_URL=frontend_url,
+            BACKEND_URL=backend_url,
             CORS_ORIGINS=cors_origins,
             DATABASE_URL=_env("DATABASE_URL") or _env("DB_URL"),
             DB_POOL_SIZE=_env_int("DB_POOL_SIZE", 5),

@@ -616,7 +616,7 @@ def get_podio_form_proxy():
         return HTMLResponse(
             content=html,
             headers={
-                "Content-Security-Policy": "frame-ancestors 'self' https://accelerator.aiesec.org.eg http://localhost:5173 https://accelerator.aiesec.org.eg https://localhost:5173",
+                "Content-Security-Policy": f"frame-ancestors 'self' http://localhost:3000 http://localhost:5173 https://localhost:3000 https://localhost:5173 {settings.FRONTEND_URL}",
             },
         )
     except requests.exceptions.RequestException as e:

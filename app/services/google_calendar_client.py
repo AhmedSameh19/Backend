@@ -19,7 +19,7 @@ SCOPES = ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.co
 def _get_flow() -> Flow:
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set")
-    redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI or "https://api-accelerator.aiesec.org.eg/api/v1/calendar/google/callback"
+    redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI or f"{settings.BACKEND_URL}/api/v1/calendar/google/callback"
     return Flow.from_client_config(
         {
             "web": {

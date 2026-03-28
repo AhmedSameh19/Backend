@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.services import google_calendar_client as gcal
 
@@ -77,7 +78,7 @@ def google_calendar_callback(
     if error:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(
-            url=f"https://accelerator.aiesec.org.eg/calendar?google=error&message={error}",
+            url=f"{settings.FRONTEND_URL}/calendar?google=error&message={error}",
             status_code=302,
         )
     if not code or not state:
@@ -87,11 +88,11 @@ def google_calendar_callback(
     except Exception as e:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(
-            url=f"https://accelerator.aiesec.org.eg/calendar?google=error&message=exchange_failed",
+            url=f"{settings.FRONTEND_URL}/calendar?google=error&message=exchange_failed",
             status_code=302,
         )
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="https://accelerator.aiesec.org.eg/calendar?google=connected", status_code=302)
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/calendar?google=connected", status_code=302)
 
 
 @router.get("/google/status", response_model=CalendarStatusOut, tags=["calendar"])
