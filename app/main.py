@@ -82,7 +82,7 @@ def podio_form_proxy():
         html = re.sub(r'(href|src|action)=["\']([^"\']+)["\']', _replace, html)
         return HTMLResponse(
             content=html,
-            headers={"Content-Security-Policy": "frame-ancestors 'self' http://localhost:3000 http://localhost:5173 https://localhost:3000 https://localhost:5173"},
+            headers={"Content-Security-Policy": "frame-ancestors 'self' https://accelerator.aiesec.org.eg http://localhost:5173 https://accelerator.aiesec.org.eg https://localhost:5173"},
         )
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch Podio form: {str(e)}")

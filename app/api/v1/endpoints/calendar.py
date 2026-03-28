@@ -77,7 +77,7 @@ def google_calendar_callback(
     if error:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(
-            url=f"http://localhost:3000/calendar?google=error&message={error}",
+            url=f"https://accelerator.aiesec.org.eg/calendar?google=error&message={error}",
             status_code=302,
         )
     if not code or not state:
@@ -87,11 +87,11 @@ def google_calendar_callback(
     except Exception as e:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(
-            url=f"http://localhost:3000/calendar?google=error&message=exchange_failed",
+            url=f"https://accelerator.aiesec.org.eg/calendar?google=error&message=exchange_failed",
             status_code=302,
         )
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="http://localhost:3000/calendar?google=connected", status_code=302)
+    return RedirectResponse(url="https://accelerator.aiesec.org.eg/calendar?google=connected", status_code=302)
 
 
 @router.get("/google/status", response_model=CalendarStatusOut, tags=["calendar"])
