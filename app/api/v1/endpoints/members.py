@@ -8,10 +8,15 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.members import Member
 from app.schemas.members import MemberCreate, MemberOut, OkResponse
+from app.services.expa_client import ExpaClient
+from app.utils.pagination import PaginatedResponse, PaginationParams, build_pagination_response
+from sqlalchemy import or_, desc, asc
 from app.services.expa_client import ExpaClient
 
 router = APIRouter(prefix="/members", tags=["members"])
@@ -60,13 +65,25 @@ def create_member(payload: MemberCreate, db: Session = Depends(get_db)) -> Membe
             detail="Internal server error",
         )
 
-#get all of memberss
-#endpoint: /members
-@router.get("", response_model=List[MemberOut])
-def list_members(db: Session = Depends(get_db)) -> List[MemberOut]:
+@router.get("", response_model=PaginatedResponse[MemberOut])
+def list_members(params: PaginationParams = Depends(), db: Session = Depends(get_db)) -> PaginatedResponse[MemberOut]:
     try:
-        members = db.execute(select(Member).order_by(Member.full_name.asc())).scalars().all()
-        return members
+        query = select(Member)
+        if params.search:
+            search_t = f"%{params.search}%"
+            query = query.where(or_(Member.full_name.ilike(search_t), Member.email.ilike(search_t)))
+        
+        total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
+        
+        sort_col = getattr(Member, params.sortBy, Member.full_name)
+        if params.sortOrder == "desc":
+            query = query.order_by(desc(sort_col))
+        else:
+            query = query.order_by(asc(sort_col))
+            
+        query = query.offset(params.skip).limit(params.limit)
+        members = db.execute(query).scalars().all()
+        return build_pagination_response(list(members), total, params.page, params.limit)
     except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -78,25 +95,34 @@ def list_members(db: Session = Depends(get_db)) -> List[MemberOut]:
             detail="Internal server error",
         )
 
-# Get all members in a specific LC (for assign dropdown fallback when no one reports to you)
-# endpoint: /members/by-lc/{home_lc_id}
-@router.get("/by-lc/{home_lc_id}", response_model=List[MemberOut])
+@router.get("/by-lc/{home_lc_id}", response_model=PaginatedResponse[MemberOut])
 def list_members_by_lc(
     home_lc_id: str,
+    params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
-) -> List[MemberOut]:
+) -> PaginatedResponse[MemberOut]:
     """Return all members for the given LC. Use as fallback when reports-to returns empty."""
     try:
         lc_id_str = str(home_lc_id).strip() if home_lc_id else ""
         if not lc_id_str:
-            return []
-        stmt = (
-            select(Member)
-            .where(Member.home_lc_id == lc_id_str)
-            .order_by(Member.full_name.asc())
-        )
-        result = db.execute(stmt).scalars().all()
-        return list(result)
+            return build_pagination_response([], 0, params.page, params.limit)
+        
+        query = select(Member).where(Member.home_lc_id == lc_id_str)
+        if params.search:
+            search_t = f"%{params.search}%"
+            query = query.where(or_(Member.full_name.ilike(search_t), Member.email.ilike(search_t)))
+        
+        total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
+        
+        sort_col = getattr(Member, params.sortBy, Member.full_name)
+        if params.sortOrder == "desc":
+            query = query.order_by(desc(sort_col))
+        else:
+            query = query.order_by(asc(sort_col))
+            
+        query = query.offset(params.skip).limit(params.limit)
+        result = db.execute(query).scalars().all()
+        return build_pagination_response(list(result), total, params.page, params.limit)
     except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -109,18 +135,17 @@ def list_members_by_lc(
         )
 
 
-# Get members in a specific LC that report to a specific member (must be before /{member_id})
-# endpoint: /members/by-lc/{home_lc_id}/reports-to/{reports_to_member_id}
-@router.get("/by-lc/{home_lc_id}/reports-to/{reports_to_member_id}", response_model=List[MemberOut])
+@router.get("/by-lc/{home_lc_id}/reports-to/{reports_to_member_id}", response_model=PaginatedResponse[MemberOut])
 def list_members_by_lc_and_reports_to(
     home_lc_id: str,
     reports_to_member_id: str,
+    params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
     alt_person_id: str | None = Query(
         None,
         description="Alternate EXPA person id if auth cookie uses a different format than members.expa_person_id",
     ),
-) -> List[MemberOut]:
+) -> PaginatedResponse[MemberOut]:
     try:
         # Path param can be EXPA person id or member_id (position id). Find ALL positions for this person.
         param = (reports_to_member_id or "").strip()
@@ -146,19 +171,32 @@ def list_members_by_lc_and_reports_to(
             if c and c not in reports_to_candidates:
                 reports_to_candidates.append(c)
         if not reports_to_candidates:
-            return []
+            return build_pagination_response([], 0, params.page, params.limit)
         lc_id_str = str(home_lc_id).strip() if home_lc_id else ""
         if not lc_id_str:
-            return []
-        stmt = (
+            return build_pagination_response([], 0, params.page, params.limit)
+            
+        query = (
             select(Member)
             .where(Member.home_lc_id == lc_id_str)
             .where(Member.reports_to_member_id.in_(reports_to_candidates))
-            .order_by(Member.full_name.asc())
         )
-        # .scalars().all() returns list of Member instances for List[MemberOut] serialization
-        result = db.execute(stmt).scalars().all()
-        return list(result)
+        if params.search:
+            search_t = f"%{params.search}%"
+            query = query.where(or_(Member.full_name.ilike(search_t), Member.email.ilike(search_t)))
+            
+        total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
+        
+        sort_col = getattr(Member, params.sortBy, Member.full_name)
+        if params.sortOrder == "desc":
+            query = query.order_by(desc(sort_col))
+        else:
+            query = query.order_by(asc(sort_col))
+            
+        query = query.offset(params.skip).limit(params.limit)
+
+        result = db.execute(query).scalars().all()
+        return build_pagination_response(list(result), total, params.page, params.limit)
     except HTTPException:
         raise
     except SQLAlchemyError:
@@ -289,8 +327,8 @@ def debug_reports_to(
     return _debug_reports_to_impl(home_lc_id, reports_to_member_id, alt_person_id, db)
 
 
-@router.get("/me/reports", response_model=List[MemberOut])
-def list_my_reports(request: Request, db: Session = Depends(get_db)) -> List[MemberOut]:
+@router.get("/me/reports", response_model=PaginatedResponse[MemberOut])
+def list_my_reports(request: Request, params: PaginationParams = Depends(), db: Session = Depends(get_db)) -> PaginatedResponse[MemberOut]:
     """
     Return only members who report to the currently authenticated user (EXPA token).
     Use this for assign dropdowns so the list is strictly "who reports to me", not all LC.
@@ -331,7 +369,7 @@ def list_my_reports(request: Request, db: Session = Depends(get_db)) -> List[Mem
                 person_id = str(pid)
                 break
     if not person_id:
-        return []
+        return build_pagination_response([], 0, params.page, params.limit)
     rows = db.execute(
         select(Member).where(Member.expa_person_id == person_id)
     ).scalars().all()
@@ -341,14 +379,28 @@ def list_my_reports(request: Request, db: Session = Depends(get_db)) -> List[Mem
         if member:
             my_member_ids = [member.member_id]
     if not my_member_ids:
-        return []
-    stmt = (
+        return build_pagination_response([], 0, params.page, params.limit)
+        
+    query = (
         select(Member)
         .where(Member.home_lc_id == lc_id_str)
         .where(Member.reports_to_member_id.in_(my_member_ids))
-        .order_by(Member.full_name.asc())
     )
-    return list(db.execute(stmt).scalars().all())
+    if params.search:
+        search_t = f"%{params.search}%"
+        query = query.where(or_(Member.full_name.ilike(search_t), Member.email.ilike(search_t)))
+        
+    total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
+    
+    sort_col = getattr(Member, params.sortBy, Member.full_name)
+    if params.sortOrder == "desc":
+        query = query.order_by(desc(sort_col))
+    else:
+        query = query.order_by(asc(sort_col))
+        
+    query = query.offset(params.skip).limit(params.limit)
+
+    return build_pagination_response(list(db.execute(query).scalars().all()), total, params.page, params.limit)
 
 
 @router.get("/me/sync-person-id", status_code=status.HTTP_200_OK)

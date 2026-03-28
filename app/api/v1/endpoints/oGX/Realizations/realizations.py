@@ -7,32 +7,39 @@ from app.db.session import get_db
 from app.models.members import Member
 from app.models.leads.expa_lead_realizations import ExpaLeadRealization
 from app.schemas.leads.leads import LeadBulkAssignRequest
+from app.utils.pagination import PaginatedResponse, PaginationParams, build_pagination_response
+from sqlalchemy import desc, asc, func
+from typing import Any
 
 router = APIRouter(prefix="/realizations", tags=["Realizations"])
 
 
 # Retrieve realizations by home LC ID with cursor pagination
 # endpoint: /realizations/?home_lc_id={home_lc_id}
-@router.get("/")
+@router.get("/", response_model=PaginatedResponse[Any])
 def get_realizations(
     home_lc_id: int,
+    params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
 ):
     try:
-
         if home_lc_id == 1609:
-            stmt = (
-                select(ExpaLeadRealization)
-                .order_by(ExpaLeadRealization.updated_at.desc(), ExpaLeadRealization.id.desc())
-            )
+            query = select(ExpaLeadRealization)
         else:
-            stmt = (
-                select(ExpaLeadRealization)
-                .where(ExpaLeadRealization.home_lc_id == home_lc_id)
-                .order_by(ExpaLeadRealization.updated_at.desc(), ExpaLeadRealization.id.desc())
-            )
-        items = db.execute(stmt).scalars().all()
-        return {"items": items}
+            query = select(ExpaLeadRealization).where(ExpaLeadRealization.home_lc_id == home_lc_id)
+
+        total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
+
+        sort_col = getattr(ExpaLeadRealization, params.sortBy, ExpaLeadRealization.updated_at)
+        if params.sortOrder == "desc":
+            query = query.order_by(desc(sort_col), ExpaLeadRealization.id.desc())
+        else:
+            query = query.order_by(asc(sort_col), ExpaLeadRealization.id.asc())
+
+        query = query.offset(params.skip).limit(params.limit)
+        items = db.execute(query).scalars().all()
+
+        return build_pagination_response(list(items), total, params.page, params.limit)
     except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

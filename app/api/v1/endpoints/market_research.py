@@ -33,6 +33,7 @@ from app.schemas.market_research import (
     ScheduledVisitOut,
     PodioScheduledVisitCreate,
 )
+from app.utils.pagination import PaginatedResponse, PaginationParams, build_pagination_response
 
 router = APIRouter()
 
@@ -487,11 +488,10 @@ def create_or_update_podio_scheduled_visit(
         )
 
 
-@router.get("", response_model=MarketResearchListResponse, tags=["market-research"])
+@router.get("", response_model=PaginatedResponse[Any], tags=["market-research"])
 async def get_market_research(
-    limit: int = Query(100, ge=1, le=500, description="Maximum number of items to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination"),
     lc_id: Optional[int] = Query(None, description="Filter by LC id (EXPA/LC_CODES id); only items for this LC are returned"),
+    params: PaginationParams = Depends(),
     podio_client: PodioClient = Depends(get_podio_client),
 ):
     """
@@ -517,8 +517,8 @@ async def get_market_research(
             filter_key = str(settings.PODIO_MARKET_RESEARCH_LC_FIELD_ID)
             items = podio_client.get_app_items_filtered(
                 filters={filter_key: option_ids},
-                limit=limit,
-                offset=offset,
+                limit=params.limit,
+                offset=params.skip,
             )
             mapped_items = [
                 map_podio_item_to_market_research(item)
@@ -528,18 +528,14 @@ async def get_market_research(
         else:
             # Fallback: fetch page then filter by LC name in memory (or no lc_id = show all for this page).
             items = podio_client.get_app_items(
-                limit=limit,
-                offset=offset,
+                limit=params.limit,
+                offset=params.skip,
             )
             mapped_items = [
                 map_podio_item_to_market_research(item)
                 for item in items
                 if isinstance(item, dict)
             ]
-            before_filter = len(mapped_items)
-            lc_name_used = None
-            allowed_list = None
-            sample_lc_in_podio = list({(m.local_committee or "").strip() for m in mapped_items[:100] if m.local_committee})[:15]
             if lc_id is not None and getattr(settings, "EXPA_LC_NAMES", None):
                 lc_names = settings.EXPA_LC_NAMES
                 lc_name_used = lc_names.get(lc_id) or (lc_names.get(int(lc_id)) if lc_id is not None else None)
@@ -548,12 +544,15 @@ async def get_market_research(
                     allowed = {match}
                     if match == "alexandria":
                         allowed.add("alex")
-                    allowed_list = list(allowed)
                     mapped_items = [m for m in mapped_items if m.local_committee and m.local_committee.strip().lower() in allowed]
 
-        return MarketResearchListResponse(
-            items=mapped_items,
-            total=len(mapped_items),
+        # Note: podio total might be larger, but we just simulate it to keep hasNextPage true if we got back a full page
+        simulated_total = params.skip + len(mapped_items) + (1 if len(mapped_items) == params.limit else 0)
+        return build_pagination_response(
+            list(mapped_items),
+            simulated_total,
+            params.page,
+            params.limit
         )
     except ValueError as e:
         raise HTTPException(

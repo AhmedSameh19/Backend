@@ -12,6 +12,8 @@ from app.models.leads.expa_leads import ExpaLead
 from app.models.members import Member
 
 from app.schemas.leads.leads import LeadAssignRequest, LeadBulkAssignRequest
+from app.utils.pagination import PaginatedResponse, PaginationParams, build_pagination_response
+from sqlalchemy import or_, desc, asc, func
 
 logger = logging.getLogger(__name__)
 
@@ -19,55 +21,41 @@ router = APIRouter(prefix="/leads", tags=["Leads"])
 
 ## Retrieve leads by home LC ID with pagination
 #endpoint: /leads/?home_lc_id={home_lc_id}
-@router.get("/")
+@router.get("/", response_model=PaginatedResponse[Any])
 def get_leads(
     home_lc_id: int,
-    cursor_created_at: Optional[datetime] = None,
-    cursor_expa_person_id: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 50,
+    params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
 ):
     try:
-        if limit <= 0:
-            raise HTTPException(status_code=400, detail="limit must be > 0")
-
-        if (cursor_created_at is None) != (cursor_expa_person_id is None):
-            raise HTTPException(
-                status_code=400,
-                detail="cursor_created_at and cursor_expa_person_id must be provided together",
-            )
         # Special case: treat 1609 as "all leads" (no LC filtering)
         if home_lc_id == 1609:
-            query = db.query(ExpaLead)
+            query = select(ExpaLead)
         else:
-            query = db.query(ExpaLead).filter(ExpaLead.home_lc_id == home_lc_id)
+            query = select(ExpaLead).filter(ExpaLead.home_lc_id == home_lc_id)
 
-        query = query.order_by(ExpaLead.created_at.desc(), ExpaLead.expa_person_id.desc())
-        
-        
-
-        if cursor_created_at is not None and cursor_expa_person_id is not None:
+        if params.search:
+            search_t = f"%{params.search}%"
             query = query.filter(
-                tuple_(ExpaLead.created_at, ExpaLead.expa_person_id)
-                < (cursor_created_at, cursor_expa_person_id)
+                or_(
+                    ExpaLead.full_name.ilike(search_t),
+                    ExpaLead.email.ilike(search_t),
+                    ExpaLead.phone.ilike(search_t)
+                )
             )
-        elif skip:
-            # Backward-compatible offset pagination (less efficient for large offsets)
-            query = query.offset(skip)
 
-        # Fetch one extra row to know if there is a next page.
-        items = query.limit(limit + 1).all()
-        next_cursor: Optional[Dict[str, Any]] = None
-        if len(items) > limit:
-            items = items[:limit]
-            last = items[-1]
-            next_cursor = {
-                "created_at": last.created_at.isoformat(),
-                "expa_person_id": last.expa_person_id,
-            }
+        total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
 
-        return {"items": items, "next_cursor": next_cursor}
+        sort_col = getattr(ExpaLead, params.sortBy, ExpaLead.created_at)
+        if params.sortOrder == "desc":
+            query = query.order_by(desc(sort_col), ExpaLead.expa_person_id.desc())
+        else:
+            query = query.order_by(asc(sort_col), ExpaLead.expa_person_id.asc())
+            
+        query = query.offset(params.skip).limit(params.limit)
+        items = db.execute(query).scalars().all()
+
+        return build_pagination_response(list(items), total, params.page, params.limit)
     except SQLAlchemyError as e:
         logger.exception("DB error in get_leads(home_lc_id=%s)", home_lc_id)
         raise HTTPException(status_code=503, detail="Database error") from e

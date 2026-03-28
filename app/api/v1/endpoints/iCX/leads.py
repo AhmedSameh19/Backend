@@ -13,57 +13,50 @@ from app.db.session import get_db
 from app.models.icx.expa_icx_leads import ExpaICXLead
 from app.models.members import Member
 from app.schemas.icx.leads import ICXLeadBulkAssignRequest
+from app.utils.pagination import PaginatedResponse, PaginationParams, build_pagination_response
+from sqlalchemy import or_, desc, asc, func
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/icx/leads", tags=["iCX Leads"])
 
 
-@router.get("/")
+@router.get("/", response_model=PaginatedResponse[Any])
 def get_icx_leads(
     host_lc_id: str,
-    cursor_created_at: Optional[datetime] = None,
-    cursor_application_id: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 50,
+    params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
 ):
     try:
-        if limit <= 0:
-            raise HTTPException(status_code=400, detail="limit must be > 0")
-
-        if (cursor_created_at is None) != (cursor_application_id is None):
-            raise HTTPException(
-                status_code=400,
-                detail="cursor_created_at and cursor_application_id must be provided together",
-            )
-
         # Special case: treat 1609 as "all leads"
         if str(host_lc_id) == "1609":
-            query = db.query(ExpaICXLead)
+            query = select(ExpaICXLead)
         else:
-            query = db.query(ExpaICXLead).filter(ExpaICXLead.host_lc_id == host_lc_id)
+            query = select(ExpaICXLead).filter(ExpaICXLead.host_lc_id == host_lc_id)
 
-        query = query.order_by(ExpaICXLead.created_at.desc(), ExpaICXLead.application_id.desc())
-
-        if cursor_created_at is not None and cursor_application_id is not None:
+        if params.search:
+            search_t = f"%{params.search}%"
             query = query.filter(
-                tuple_(ExpaICXLead.created_at, ExpaICXLead.application_id) < (cursor_created_at, cursor_application_id)
+                or_(
+                    ExpaICXLead.full_name.ilike(search_t),
+                    ExpaICXLead.email.ilike(search_t),
+                    ExpaICXLead.phone.ilike(search_t)
+                )
             )
-        elif skip:
-            query = query.offset(skip)
 
-        items = query.limit(limit + 1).all()
-        next_cursor: Optional[Dict[str, Any]] = None
-        if len(items) > limit:
-            items = items[:limit]
-            last = items[-1]
-            next_cursor = {
-                "created_at": last.created_at.isoformat() if last.created_at else None,
-                "application_id": last.application_id,
-            }
+        total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
 
-        return {"items": items, "next_cursor": next_cursor}
+        sort_col = getattr(ExpaICXLead, params.sortBy, ExpaICXLead.created_at)
+        if params.sortOrder == "desc":
+            query = query.order_by(desc(sort_col), ExpaICXLead.application_id.desc())
+        else:
+            query = query.order_by(asc(sort_col), ExpaICXLead.application_id.asc())
+
+        query = query.offset(params.skip).limit(params.limit)
+        items = db.execute(query).scalars().all()
+
+        return build_pagination_response(list(items), total, params.page, params.limit)
     except SQLAlchemyError as e:
         logger.exception("DB error in get_icx_leads(host_lc_id=%s)", host_lc_id)
         raise HTTPException(status_code=503, detail="Database error") from e

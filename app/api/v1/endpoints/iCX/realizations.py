@@ -11,37 +11,40 @@ from app.db.session import get_db
 from app.models.icx.expa_icx_realizations import ExpaICXRealization
 from app.models.members import Member
 from app.schemas.icx.leads import ICXLeadBulkAssignRequest
+from app.utils.pagination import PaginatedResponse, PaginationParams, build_pagination_response
+from sqlalchemy import desc, asc, func
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/icx/realizations", tags=["iCX Realizations"])
 
 
-@router.get("/")
+@router.get("/", response_model=PaginatedResponse[Any])
 def get_icx_realizations(
     host_lc_id: str,
+    params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
 ):
     try:
         if str(host_lc_id) == "1609":
-            stmt = select(ExpaICXRealization).order_by(
-                ExpaICXRealization.date_realized.desc().nullslast(),
-                ExpaICXRealization.updated_at.desc(),
-                ExpaICXRealization.application_id.desc(),
-            )
+            query = select(ExpaICXRealization)
         else:
-            stmt = (
-                select(ExpaICXRealization)
-                .where(ExpaICXRealization.host_lc_id == str(host_lc_id))
-                .order_by(
-                    ExpaICXRealization.date_realized.desc().nullslast(),
-                    ExpaICXRealization.updated_at.desc(),
-                    ExpaICXRealization.application_id.desc(),
-                )
-            )
+            query = select(ExpaICXRealization).where(ExpaICXRealization.host_lc_id == str(host_lc_id))
 
-        items = db.execute(stmt).scalars().all()
-        return {"items": items}
+        total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
+
+        # sort logic
+        sort_col = getattr(ExpaICXRealization, params.sortBy, ExpaICXRealization.date_realized)
+        if params.sortOrder == "desc":
+            query = query.order_by(desc(sort_col).nullslast(), ExpaICXRealization.application_id.desc())
+        else:
+            query = query.order_by(asc(sort_col).nullsfirst(), ExpaICXRealization.application_id.asc())
+
+        query = query.offset(params.skip).limit(params.limit)
+        items = db.execute(query).scalars().all()
+
+        return build_pagination_response(list(items), total, params.page, params.limit)
     except SQLAlchemyError as e:
         logger.exception("DB error in get_icx_realizations(host_lc_id=%s)", host_lc_id)
         raise HTTPException(status_code=503, detail="Database error") from e
