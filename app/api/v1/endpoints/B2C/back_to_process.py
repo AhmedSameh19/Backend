@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query,status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -17,7 +17,8 @@ router = APIRouter(prefix="/b2c", tags=["B2C"])
 @router.get("/back-to-process/{home_lc_id}", response_model=list[BackToProcessOut])
 def list_back_to_process(
 	home_lc_id: int,
-	limit: int = 100,
+	limit: int = Query(100, gt=0, le=500),  # max 500 rows at once
+    offset: int = Query(0, ge=0),
 	db: Session = Depends(get_db),
 ) -> list[BackToProcessOut]:
 	try:
@@ -27,8 +28,9 @@ def list_back_to_process(
 		stmt = (
 			select(B2CBackToProcess)
 			.where(B2CBackToProcess.home_lc_id == home_lc_id)
-			.order_by(B2CBackToProcess.inserted_at.desc(), B2CBackToProcess.id.desc())
+			.order_by(B2CBackToProcess.inserted_at.desc())
 			.limit(limit)
+			.offset(offset)
 		)
 		return db.execute(stmt).scalars().all()
 	except HTTPException:

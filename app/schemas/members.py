@@ -12,7 +12,7 @@ class MemberOut(BaseModel):
     full_name: str = Field(..., min_length=1)
     role: str | None = None
     function: str | None = None
-    email:str| None=None
+    email: str | None = None
 
     class Config:
         from_attributes = True

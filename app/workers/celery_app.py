@@ -21,7 +21,6 @@ celery = Celery(
         "app.workers.icx_leads_tasks",
         "app.workers.icx_realizations_tasks",
         "app.workers.followup_reminder_tasks",
-
     ],
 )
 
@@ -55,7 +54,7 @@ celery.conf.beat_schedule = {
         "schedule": crontab(day_of_month=1, hour=0, minute=10),
     },
     "send-followup-reminders-every-15min": {
-         "task": "notifications.send_followup_reminders",
+        "task": "notifications.send_followup_reminders",
         "schedule": crontab(minute="*/15"),  # every 15 minutes
     },
 }

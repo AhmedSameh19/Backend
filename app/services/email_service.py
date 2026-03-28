@@ -1,4 +1,7 @@
-
+"""
+Lightweight SMTP email sender.
+Uses Python's built-in smtplib — no extra dependencies needed.
+"""
 from __future__ import annotations
 
 import logging

@@ -1,3 +1,11 @@
+"""
+Celery task: send email reminders for follow-ups that are due.
+
+Runs every 15 minutes. Picks up all *pending* follow-ups whose
+`follow_up_at` falls within the current 15-minute window, joins
+with the members table (created_by_member_id → expa_person_id)
+to get the member's email, and sends a reminder.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -69,6 +77,7 @@ def _process_followups(db, now_start, now_end) -> dict:
         .where(
             and_(
                 ExpaLeadFollowUp.status == "pending",
+                ExpaLeadFollowUp.follow_up_at >= now_start,
                 ExpaLeadFollowUp.follow_up_at < now_end,
             )
         )
@@ -106,6 +115,7 @@ def _process_followups(db, now_start, now_end) -> dict:
         .where(
             and_(
                 ExpaICXLeadFollowUp.status == "pending",
+                ExpaICXLeadFollowUp.follow_up_at >= now_start,
                 ExpaICXLeadFollowUp.follow_up_at < now_end,
             )
         )

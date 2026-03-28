@@ -1,102 +1,18 @@
 version: '3.9'
 
 services:
-  api:
-    build: .
-    expose:
-      - "8000"
+  postgres:
+    image: postgres:15
+    container_name: crm_postgres
     environment:
-      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
-      REDIS_URL: redis://redis:6379/0
-      RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
-      AIESEC_API_TOKEN: ${AIESEC_API_TOKEN}
-      AIESEC_API_URL: ${AIESEC_API_URL}
-      EXPA_HOME_MC_ID: ${EXPA_HOME_MC_ID}
-      EXPA_PER_PAGE: ${EXPA_PER_PAGE}
-      EXPA_REGISTERED_FROM: ${EXPA_REGISTERED_FROM}
-      EXPA_REGISTERED_TO: ${EXPA_REGISTERED_TO}
-      EXPA_APPROVED_FROM: ${EXPA_APPROVED_FROM}
-      DB_POOL_SIZE: ${DB_POOL_SIZE}
-      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW}
-      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT}
-      DB_CONNECT_TIMEOUT: ${DB_CONNECT_TIMEOUT}
-      ENV: ${ENV}
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      rabbitmq:
-        condition: service_started
-    restart: unless-stopped
-
-  celery_worker:
-    build: .
-    environment:
-      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
-      REDIS_URL: redis://redis:6379/0
-      RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
-      AIESEC_API_TOKEN: ${AIESEC_API_TOKEN}
-      AIESEC_API_URL: ${AIESEC_API_URL}
-      EXPA_HOME_MC_ID: ${EXPA_HOME_MC_ID}
-      EXPA_PER_PAGE: ${EXPA_PER_PAGE}
-      EXPA_REGISTERED_FROM: ${EXPA_REGISTERED_FROM}
-      EXPA_REGISTERED_TO: ${EXPA_REGISTERED_TO}
-      EXPA_APPROVED_FROM: ${EXPA_APPROVED_FROM}
-      DB_POOL_SIZE: "5"
-      DB_MAX_OVERFLOW: "0"
-      DB_POOL_TIMEOUT: "10"
-      DB_CONNECT_TIMEOUT: "5"
-      ENV: ${ENV}
-    command: celery -A app.workers.celery_app.celery worker --loglevel=info --concurrency=2
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      rabbitmq:
-        condition: service_started
-    restart: unless-stopped
-
-  celery_beat:
-    build: .
-    environment:
-      DATABASE_URL: postgresql+psycopg://doadmin:${DB_PASSWORD}@pgbouncer:5432/${DB_NAME}
-      REDIS_URL: redis://redis:6379/0
-      RABBITMQ_URL: amqp://crm:crm@rabbitmq:5672//
-      AIESEC_API_TOKEN: ${AIESEC_API_TOKEN}
-      AIESEC_API_URL: ${AIESEC_API_URL}
-      EXPA_HOME_MC_ID: ${EXPA_HOME_MC_ID}
-      EXPA_PER_PAGE: ${EXPA_PER_PAGE}
-      EXPA_REGISTERED_FROM: ${EXPA_REGISTERED_FROM}
-      EXPA_REGISTERED_TO: ${EXPA_REGISTERED_TO}
-      EXPA_APPROVED_FROM: ${EXPA_APPROVED_FROM}
-      ENV: ${ENV}
-    command: celery -A app.workers.celery_app.celery beat --loglevel=info
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      rabbitmq:
-        condition: service_started
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
+      POSTGRES_USER: ${CRM_DB_USER:-crm}
+      POSTGRES_PASSWORD: ${CRM_DB_PASSWORD:-crm}
+      POSTGRES_DB: ${CRM_DB_NAME:-crm}
+    ports:
+      - "5432:5432"
     volumes:
-      - redis_data:/data
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: crm
-      RABBITMQ_DEFAULT_PASS: crm
+      - crm_pgdata:/var/lib/postgresql/data
     restart: unless-stopped
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
 
   pgbouncer:
     image: edoburu/pgbouncer:v1.25.1-p0
@@ -111,6 +27,85 @@ services:
       retries: 20
     restart: unless-stopped
 
+  api:
+    build: .
+    expose:
+      - "8000"
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-4}
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    restart: unless-stopped
+
+  celery_worker:
+    build: .
+    env_file:
+      - .env
+    command: celery -A app.workers.celery_app.celery worker --loglevel=info --concurrency=2
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    restart: unless-stopped
+
+  celery_beat:
+    build: .
+    env_file:
+      - .env
+    command: celery -A app.workers.celery_app.celery beat --loglevel=info
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-crm}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-crm}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: unless-stopped
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: crm_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
 volumes:
+  crm_pgdata:
   redis_data:
   rabbitmq_data:

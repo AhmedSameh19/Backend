@@ -112,8 +112,6 @@ class Settings:
     EXPA_ICX_PROGRAMMES: List[int]
     EXPA_ICX_HOST_LC_IDS: List[int]
     EXPA_ICX_REALIZED_FROM: str
-<<<<<<< HEAD
-    CORS_ORIGINS: List[str]
 
     # Podio
     PODIO_CLIENT_ID: Optional[str]
@@ -131,7 +129,7 @@ class Settings:
     GOOGLE_CLIENT_SECRET: Optional[str]
     GOOGLE_CALENDAR_REDIRECT_URI: Optional[str]
 
-    # Email (SMTP)
+    # Email / SMTP
     SMTP_HOST: str
     SMTP_PORT: int
     SMTP_USER: str
