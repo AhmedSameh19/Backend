@@ -14,13 +14,13 @@ def members_to_rows(members: List[Dict[str, Any]],home_lc_id: int, home_mc_id: i
             "email": member.get("person", {}).get("email"),
             "function": member.get("function", {}).get("name"),
             "reports_to_member_id": (
-                str(reports_to.get("id"))
-                if reports_to is not None
+                str(member.get("reports_to_position_id"))
+                if member.get("reports_to_position_id") is not None
                 else None
             ),
             "reports_to_person_id": (
-                str(reports_to.get("person", {}).get("id"))
-                if (reports_to and reports_to.get("person"))
+                str(reports_to.get("id"))
+                if reports_to is not None
                 else None
             ),
             "home_lc_id": str(home_lc_id),

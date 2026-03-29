@@ -34,11 +34,9 @@ query MemberPositionList($home_lc_id: Int, $from: DateTime, $to: DateTime, $page
       function {
         name
       }
+      reports_to_position_id
       reports_to {
         id
-        person {
-          id
-        }
       }
     }
     paging {
