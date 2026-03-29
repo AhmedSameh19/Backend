@@ -107,7 +107,9 @@ def list_members_by_lc(
         if not lc_id_str:
             return build_pagination_response([], 0, params.page, params.limit)
         
-        query = select(Member).where(Member.home_lc_id == lc_id_str)
+        query = select(Member)
+        if lc_id_str != str(settings.EXPA_HOME_MC_ID):
+            query = query.where(Member.home_lc_id == lc_id_str)
         if params.search:
             search_t = f"%{params.search}%"
             query = query.where(or_(Member.full_name.ilike(search_t), Member.email.ilike(search_t)))
@@ -176,11 +178,9 @@ def list_members_by_lc_and_reports_to(
         if not lc_id_str:
             return build_pagination_response([], 0, params.page, params.limit)
             
-        query = (
-            select(Member)
-            .where(Member.home_lc_id == lc_id_str)
-            .where(Member.reports_to_member_id.in_(reports_to_candidates))
-        )
+        query = select(Member).where(func.trim(Member.reports_to_member_id).in_(reports_to_candidates))
+        if lc_id_str != str(settings.EXPA_HOME_MC_ID):
+            query = query.where(Member.home_lc_id == lc_id_str)
         if params.search:
             search_t = f"%{params.search}%"
             query = query.where(or_(Member.full_name.ilike(search_t), Member.email.ilike(search_t)))
