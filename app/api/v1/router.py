@@ -19,6 +19,7 @@ from app.api.v1.endpoints.B2C.status import router as b2c_leads_router
 from app.api.v1.endpoints.market_research import router as market_research_router
 from app.api.v1.endpoints.calendar import router as calendar_router
 from app.api.v1.endpoints.auth_compat import router as auth_compat_router
+from app.api.v1.endpoints.dashboard import router as dashboard_router
 
 api_router = APIRouter()
 api_router.include_router(health_router, prefix="/health", tags=["health"])
@@ -41,3 +42,4 @@ api_router.include_router(b2c_comments_router)
 api_router.include_router(b2c_leads_router)
 api_router.include_router(market_research_router, prefix="/market-research", tags=["market-research"])
 api_router.include_router(calendar_router, prefix="/calendar", tags=["calendar"])
+api_router.include_router(dashboard_router)
