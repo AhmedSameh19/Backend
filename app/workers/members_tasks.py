@@ -65,16 +65,19 @@ def fetch_members_monthly() -> dict:
 
         db = SessionLocal()
         try:
-            upserted = upsert_members(db, rows)
+            from app.repositories.members_repository import sync_members_for_lc
+            stats = sync_members_for_lc(db, rows, home_lc_id=str(lc_code))
             db.commit()
+            upserted = stats["upserted"]
+            deleted = stats["deleted"]
         except Exception:
             db.rollback()
             raise
         finally:
             db.close()
 
-        grand_total += len(rows)
-        logger.info("LC %s | fetched=%s | upserted=%s", lc_code, len(members), upserted)
+        grand_total += upserted
+        logger.info("LC %s | fetched=%s | upserted=%s | deleted=%s", lc_code, len(members), upserted, deleted)
 
     logger.info("Finished members monthly | total_upserted=%s", grand_total)
     return {"ok": True, "total_upserted": grand_total, "from": from_date, "to": to_date}

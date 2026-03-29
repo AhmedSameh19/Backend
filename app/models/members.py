@@ -18,6 +18,7 @@ class Member(Base):
         nullable=True,
         index=True
     )
+    reports_to_person_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True, index=True)
     home_lc_id: Mapped[Optional[str]] = mapped_column(Text, nullable=False)
     home_mc_id: Mapped[Optional[str]] = mapped_column(Text, nullable=False, server_default="1609")
     home_lc_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

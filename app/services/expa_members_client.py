@@ -7,9 +7,10 @@ import requests
 
 
 MEMBERS_QUERY = """
-query MemberPositionList($home_lc_id: Int, $from: DateTime, $to: DateTime) {
+query MemberPositionList($home_lc_id: Int, $from: DateTime, $to: DateTime, $page: Int) {
   memberPositions(
     per_page: 2000
+    page: $page
     filters: {
       office_id: $home_lc_id
       status: "active"
@@ -33,7 +34,12 @@ query MemberPositionList($home_lc_id: Int, $from: DateTime, $to: DateTime) {
       function {
         name
       }
-      reports_to_position_id
+      reports_to {
+        id
+        person {
+          id
+        }
+      }
     }
     paging {
       current_page

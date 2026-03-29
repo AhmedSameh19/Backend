@@ -136,6 +136,7 @@ def upsert_members(db: Session, rows: List[Dict[str, Any]]) -> int:
             "role": stmt.excluded.role,
             "function": stmt.excluded.function,
             "reports_to_member_id": stmt.excluded.reports_to_member_id,
+            "reports_to_person_id": stmt.excluded.reports_to_person_id,
             "home_lc_id": stmt.excluded.home_lc_id,
             "home_mc_id": stmt.excluded.home_mc_id,
             "home_lc_name": stmt.excluded.home_lc_name,
@@ -145,3 +146,29 @@ def upsert_members(db: Session, rows: List[Dict[str, Any]]) -> int:
 
     result = db.execute(stmt)
     return result.rowcount or 0
+
+
+def sync_members_for_lc(db: Session, rows: List[Dict[str, Any]], home_lc_id: str) -> Dict[str, int]:
+    """Full sync for an LC: adds/updates current members and DELETES those no longer in the list."""
+    if not rows:
+        # If no members returned for this LC, delete all existing for this LC
+        delete_stmt = Member.__table__.delete().where(Member.home_lc_id == home_lc_id)
+        res = db.execute(delete_stmt)
+        return {"upserted": 0, "deleted": res.rowcount or 0}
+
+    # Identify members to keep
+    new_member_ids = {str(r["member_id"]) for r in rows if r.get("member_id")}
+    
+    # Delete members in this LC who are NOT in the new batch
+    delete_stmt = (
+        Member.__table__.delete()
+        .where(Member.home_lc_id == home_lc_id)
+        .where(Member.member_id.notin_(list(new_member_ids)))
+    )
+    delete_res = db.execute(delete_stmt)
+    deleted_count = delete_res.rowcount or 0
+    
+    # Upsert the current batch
+    upserted_count = upsert_members(db, rows)
+    
+    return {"upserted": upserted_count, "deleted": deleted_count}
