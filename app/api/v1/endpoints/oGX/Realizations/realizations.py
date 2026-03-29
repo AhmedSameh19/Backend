@@ -1,3 +1,4 @@
+from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -39,7 +40,7 @@ def get_realizations(
         query = query.offset(params.skip).limit(params.limit)
         items = db.execute(query).scalars().all()
 
-        return build_pagination_response(list(items), total, params.page, params.limit)
+        return build_pagination_response(jsonable_encoder(list(items)), total, params.page, params.limit)
     except SQLAlchemyError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

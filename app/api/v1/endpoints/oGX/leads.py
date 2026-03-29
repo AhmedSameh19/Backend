@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 import logging 
 
+from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select, tuple_
@@ -55,7 +56,7 @@ def get_leads(
         query = query.offset(params.skip).limit(params.limit)
         items = db.execute(query).scalars().all()
 
-        return build_pagination_response(list(items), total, params.page, params.limit)
+        return build_pagination_response(jsonable_encoder(list(items)), total, params.page, params.limit)
     except SQLAlchemyError as e:
         logger.exception("DB error in get_leads(home_lc_id=%s)", home_lc_id)
         raise HTTPException(status_code=503, detail="Database error") from e

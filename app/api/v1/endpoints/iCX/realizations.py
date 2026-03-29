@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from fastapi.encoders import jsonable_encoder
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -44,7 +45,7 @@ def get_icx_realizations(
         query = query.offset(params.skip).limit(params.limit)
         items = db.execute(query).scalars().all()
 
-        return build_pagination_response(list(items), total, params.page, params.limit)
+        return build_pagination_response(jsonable_encoder(list(items)), total, params.page, params.limit)
     except SQLAlchemyError as e:
         logger.exception("DB error in get_icx_realizations(host_lc_id=%s)", host_lc_id)
         raise HTTPException(status_code=503, detail="Database error") from e
