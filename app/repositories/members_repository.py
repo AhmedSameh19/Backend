@@ -128,7 +128,7 @@ def upsert_members(db: Session, rows: List[Dict[str, Any]]) -> int:
 
     stmt = insert(Member.__table__).values(rows)
     stmt = stmt.on_conflict_do_update(
-        constraint="members_expa_person_id_key",
+        index_elements=["member_id"],
         set_={
             "full_name": stmt.excluded.full_name,
             "expa_person_id": stmt.excluded.expa_person_id,
