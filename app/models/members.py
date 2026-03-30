@@ -7,7 +7,7 @@ class Member(Base):
     __tablename__ = "members"
 
     member_id: Mapped[str] = mapped_column(Text, primary_key=True, unique=True, nullable=False)
-    expa_person_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    expa_person_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True, unique=True)
     full_name: Mapped[str] = mapped_column(Text, nullable=False)
     email: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     role: Mapped[str] = mapped_column(Text, nullable=False)

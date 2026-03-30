@@ -124,6 +124,19 @@ def upsert_members(db: Session, rows: List[Dict[str, Any]]) -> int:
 
     rows = _dedupe_and_merge_by_expa_person_id(db, rows)
 
+    # 2) Handle "Person Displacement": delete records that have the same expa_person_id 
+    # but a different member_id, across the entire database. This clears the way
+    # for a person moving LCs or getting a new position ID.
+    expa_person_ids = [str(r["expa_person_id"]) for r in rows if r.get("expa_person_id")]
+    if expa_person_ids:
+        new_member_ids = {str(r["member_id"]) for r in rows if r.get("member_id")}
+        delete_stmt = (
+            Member.__table__.delete()
+            .where(Member.expa_person_id.in_(expa_person_ids))
+            .where(Member.member_id.notin_(list(new_member_ids)))
+        )
+        db.execute(delete_stmt)
+
     _null_invalid_reports_to_member_ids(db, rows)
 
     stmt = insert(Member.__table__).values(rows)
