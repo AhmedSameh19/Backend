@@ -19,17 +19,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Drop OGX check constraint
-    op.drop_constraint(
-        "ck_expa_lead_follow_ups_follow_up_at_future",
-        "expa_lead_follow_ups",
-        type_="check",
+    # Drop OGX check constraint if it exists
+    op.execute(
+        "ALTER TABLE expa_lead_follow_ups DROP CONSTRAINT IF EXISTS ck_expa_lead_follow_ups_follow_up_at_future"
     )
-    # Drop ICX check constraint
-    op.drop_constraint(
-        "ck_expa_icx_lead_follow_ups_follow_up_at_future",
-        "expa_icx_lead_follow_ups",
-        type_="check",
+    # Drop ICX check constraint if it exists
+    op.execute(
+        "ALTER TABLE expa_icx_lead_follow_ups DROP CONSTRAINT IF EXISTS ck_expa_icx_lead_follow_ups_follow_up_at_future"
     )
 
 
