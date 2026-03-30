@@ -10,10 +10,6 @@ class ExpaLeadFollowUp(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "follow_up_at > now()",
-            name="ck_expa_lead_follow_ups_follow_up_at_future",
-        ),
-        CheckConstraint(
             "status IN ('pending', 'completed')",
             name="ck_expa_lead_follow_ups_status_valid",
         ),
