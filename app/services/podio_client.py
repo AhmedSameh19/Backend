@@ -1,10 +1,17 @@
 """Podio REST client used by market research endpoints."""
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
+
+# Podio rate-limits /oauth/token aggressively. FastAPI creates a new PodioClient per request,
+# so without caching every API call was a new token request → 429/400 after heavy use.
+_token_lock = threading.Lock()
+_token_cache: Dict[Tuple[str, str, str, str], Tuple[str, float]] = {}
 
 
 @dataclass(frozen=True)
@@ -16,45 +23,75 @@ class PodioClient:
     timeout_seconds: int = 60
     base_url: str = "https://api.podio.com"
 
-    def _get_access_token(self) -> str:
-        """Get OAuth access token using app authentication"""
+    def _token_cache_key(self) -> Tuple[str, str, str, str]:
+        return (
+            self.client_id,
+            self.client_secret,
+            str(self.app_id or ""),
+            self.app_token or "",
+        )
+
+    def _fetch_access_token_uncached(self) -> Tuple[str, float]:
+        """POST /oauth/token and return (access_token, monotonic expiry time)."""
         if not self.app_id or not self.app_token:
             raise ValueError("app_id and app_token must be provided for app authentication")
-        
+
         url = f"{self.base_url}/oauth/token"
-        # Podio expects app_id as integer in the request
         app_id_int = int(self.app_id) if self.app_id else None
-        
-        # Prepare form data (not JSON) for OAuth token request
         data = {
             "grant_type": "app",
-            "app_id": app_id_int,  # Keep as integer as per Podio API
+            "app_id": app_id_int,
             "app_token": self.app_token,
         }
-        
         try:
             resp = requests.post(
                 url,
-                data=data,  # Using form data, not JSON
+                data=data,
                 auth=(self.client_id, self.client_secret),
                 timeout=self.timeout_seconds,
             )
             resp.raise_for_status()
             token_data: Dict[str, Any] = resp.json()
-            return token_data.get("access_token", "")
+            access_token = token_data.get("access_token", "")
+            if not access_token:
+                raise ValueError("Podio token response missing access_token")
+            expires_in = token_data.get("expires_in")
+            if expires_in is not None:
+                try:
+                    ttl = max(int(expires_in) - 120, 300)
+                except (TypeError, ValueError):
+                    ttl = 3300
+            else:
+                ttl = 3300
+            expires_at = time.monotonic() + float(ttl)
+            return access_token, expires_at
         except requests.exceptions.HTTPError as e:
-            # Get more details about the error
             error_detail = "Unknown error"
             if e.response is not None:
                 try:
                     error_data = e.response.json()
-                    error_detail = error_data.get("error_description", error_data.get("error", str(e)))
-                    # Also log the full error response for debugging
+                    error_detail = error_data.get(
+                        "error_description", error_data.get("error", str(e))
+                    )
                     if "error" in error_data:
-                        error_detail = error_data.get("error_description", error_data.get("error", error_detail))
-                except:
+                        error_detail = error_data.get(
+                            "error_description", error_data.get("error", error_detail)
+                        )
+                except Exception:
                     error_detail = e.response.text or str(e)
             raise ValueError("Failed to get Podio access token: " + error_detail) from e
+
+    def _get_access_token(self) -> str:
+        """OAuth app token, cached per credentials to avoid Podio /oauth/token rate limits."""
+        key = self._token_cache_key()
+        now = time.monotonic()
+        with _token_lock:
+            hit = _token_cache.get(key)
+            if hit and now < hit[1]:
+                return hit[0]
+            token, expires_at = self._fetch_access_token_uncached()
+            _token_cache[key] = (token, expires_at)
+            return token
 
     def _headers(self, access_token: str) -> Dict[str, str]:
         return {
