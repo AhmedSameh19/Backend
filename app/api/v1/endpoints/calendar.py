@@ -88,7 +88,7 @@ def google_calendar_callback(
     try:
         gcal.exchange_code_for_tokens(code=code, state=state, db=db)
     except Exception as e:
-        logger.exception("Google OAuth exchange failed for user_id=%s: %s", state, e)
+        logger.exception("Google OAuth exchange failed for callback state=%s: %s", state, e)
         from fastapi.responses import RedirectResponse
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/calendar?google=error&message=exchange_failed",

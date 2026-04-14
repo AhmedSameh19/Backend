@@ -1,9 +1,16 @@
 """Google Calendar OAuth and API client."""
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
+import secrets
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+import redis
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import Flow
@@ -14,6 +21,10 @@ from app.core.config import settings
 from app.models.google_calendar_token import GoogleCalendarToken
 
 SCOPES = ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/calendar.events"]
+PKCE_STATE_TTL_SECONDS = 600
+_PKCE_REDIS_KEY_PREFIX = "gcal:pkce:"
+_pkce_lock = threading.Lock()
+_pkce_fallback_store: Dict[str, Dict[str, Any]] = {}
 
 
 def _get_flow() -> Flow:
@@ -35,28 +46,93 @@ def _get_flow() -> Flow:
     )
 
 
+def _urlsafe_b64_no_pad(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _build_code_challenge(code_verifier: str) -> str:
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    return _urlsafe_b64_no_pad(digest)
+
+
+def _get_pkce_redis() -> Optional[redis.Redis]:
+    if not settings.REDIS_URL:
+        return None
+    try:
+        client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+        client.ping()
+        return client
+    except Exception:
+        return None
+
+
+def _store_pkce_state(nonce: str, user_id: str, code_verifier: str) -> None:
+    payload = {"user_id": user_id, "code_verifier": code_verifier, "created_at": int(time.time())}
+    redis_client = _get_pkce_redis()
+    if redis_client is not None:
+        redis_client.setex(f"{_PKCE_REDIS_KEY_PREFIX}{nonce}", PKCE_STATE_TTL_SECONDS, json.dumps(payload))
+        return
+    # Local fallback for non-Redis/dev environments.
+    with _pkce_lock:
+        _pkce_fallback_store[nonce] = {**payload, "expires_at": time.time() + PKCE_STATE_TTL_SECONDS}
+
+
+def _load_and_consume_pkce_state(nonce: str) -> Dict[str, Any]:
+    redis_client = _get_pkce_redis()
+    if redis_client is not None:
+        key = f"{_PKCE_REDIS_KEY_PREFIX}{nonce}"
+        raw = redis_client.get(key)
+        redis_client.delete(key)
+        if not raw:
+            raise ValueError("OAuth state is missing or expired. Please reconnect Google Calendar.")
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid OAuth state payload")
+        return payload
+
+    with _pkce_lock:
+        payload = _pkce_fallback_store.pop(nonce, None)
+    if not payload:
+        raise ValueError("OAuth state is missing or expired. Please reconnect Google Calendar.")
+    if payload.get("expires_at", 0) < time.time():
+        raise ValueError("OAuth state expired. Please reconnect Google Calendar.")
+    return payload
+
+
 def get_authorization_url(state: str) -> str:
-    """Build Google OAuth URL. state should be user_id for callback."""
+    """Build Google OAuth URL with PKCE and nonce state."""
     flow = _get_flow()
+    code_verifier = secrets.token_urlsafe(48)
+    code_challenge = _build_code_challenge(code_verifier)
+    nonce = secrets.token_urlsafe(24)
+    _store_pkce_state(nonce=nonce, user_id=state, code_verifier=code_verifier)
     url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
-        state=state,
+        state=nonce,
+        code_challenge=code_challenge,
+        code_challenge_method="S256",
     )
     return url
 
 
 def exchange_code_for_tokens(code: str, state: str, db: Session) -> GoogleCalendarToken:
-    """Exchange authorization code for tokens and store for user (state=user_id)."""
+    """Exchange authorization code for tokens and store for user (state=pkce nonce)."""
     flow = _get_flow()
-    flow.fetch_token(code=code)
+    pkce_state = _load_and_consume_pkce_state(state)
+    user_id = str(pkce_state.get("user_id") or "").strip()
+    code_verifier = str(pkce_state.get("code_verifier") or "").strip()
+    if not user_id or not code_verifier:
+        raise ValueError("Invalid OAuth state payload for PKCE exchange")
+
+    flow.fetch_token(code=code, code_verifier=code_verifier)
     creds = flow.credentials
     expires_at = None
     if creds.expiry:
         expires_at = creds.expiry
 
-    row = db.query(GoogleCalendarToken).filter(GoogleCalendarToken.user_id == state).first()
+    row = db.query(GoogleCalendarToken).filter(GoogleCalendarToken.user_id == user_id).first()
     if row:
         row.access_token = creds.token
         row.refresh_token = row.refresh_token or creds.refresh_token
@@ -65,7 +141,7 @@ def exchange_code_for_tokens(code: str, state: str, db: Session) -> GoogleCalend
         db.refresh(row)
         return row
     row = GoogleCalendarToken(
-        user_id=state,
+        user_id=user_id,
         access_token=creds.token,
         refresh_token=creds.refresh_token,
         expires_at=expires_at,
