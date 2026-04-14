@@ -1,6 +1,7 @@
 """Google Calendar OAuth, connection status, and events for the CRM calendar page."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +14,7 @@ from app.db.session import get_db
 from app.services import google_calendar_client as gcal
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # --- Schemas ---
@@ -86,6 +88,7 @@ def google_calendar_callback(
     try:
         gcal.exchange_code_for_tokens(code=code, state=state, db=db)
     except Exception as e:
+        logger.exception("Google OAuth exchange failed for user_id=%s: %s", state, e)
         from fastapi.responses import RedirectResponse
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/calendar?google=error&message=exchange_failed",
