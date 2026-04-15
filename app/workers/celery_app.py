@@ -2,6 +2,8 @@ from celery import Celery
 from celery.schedules import crontab
 from app.core.config import settings
 
+_mr_sync_interval_minutes = max(1, int(settings.PODIO_MR_SYNC_INTERVAL_MINUTES))
+
 broker = settings.RABBITMQ_URL
 backend = settings.REDIS_URL
 if not broker:
@@ -21,6 +23,7 @@ celery = Celery(
         "app.workers.icx_leads_tasks",
         "app.workers.icx_realizations_tasks",
         "app.workers.followup_reminder_tasks",
+        "app.workers.market_research_tasks",
     ],
 )
 
@@ -56,6 +59,10 @@ celery.conf.beat_schedule = {
     "send-followup-reminders-every-15min": {
         "task": "notifications.send_followup_reminders",
         "schedule": crontab(minute="*/15"),  # every 15 minutes
+    },
+    "sync-podio-market-research-snapshot": {
+        "task": "podio.sync_market_research_snapshot",
+        "schedule": crontab(minute=f"*/{_mr_sync_interval_minutes}"),
     },
 }
 celery.conf.broker_connection_retry_on_startup = True

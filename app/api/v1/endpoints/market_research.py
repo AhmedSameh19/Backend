@@ -16,7 +16,14 @@ from app.db.session import get_db
 from app.models.market_research.igv import IGVMarketResearch
 from app.models.market_research.b2b_market_research import B2BMarketResearch
 from app.models.market_research.podio_scheduled_visit import PodioScheduledVisit
+from app.models.market_research.snapshot import MarketResearchSnapshot
 from app.services.podio_client import PodioClient
+from app.services.market_research_snapshot_service import (
+    get_sync_status_payload,
+    list_snapshot_items,
+    to_market_research_item,
+    upsert_snapshot_items,
+)
 from app.models.members import Member
 from app.schemas.market_research import (
     MarketResearchItem,
@@ -50,6 +57,20 @@ def get_podio_client() -> PodioClient:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Podio app credentials not configured. Please set PODIO_APP_ID and PODIO_APP_TOKEN environment variables. Make sure the app_token matches the app_id.",
         )
+    return PodioClient(
+        client_id=settings.PODIO_CLIENT_ID,
+        client_secret=settings.PODIO_CLIENT_SECRET,
+        app_id=settings.PODIO_APP_ID,
+        app_token=settings.PODIO_APP_TOKEN,
+    )
+
+
+def get_optional_podio_client() -> Optional[PodioClient]:
+    """Return Podio client when configured, otherwise None to allow snapshot-only reads."""
+    if not settings.PODIO_CLIENT_ID or not settings.PODIO_CLIENT_SECRET:
+        return None
+    if not settings.PODIO_APP_ID or not settings.PODIO_APP_TOKEN:
+        return None
     return PodioClient(
         client_id=settings.PODIO_CLIENT_ID,
         client_secret=settings.PODIO_CLIENT_SECRET,
@@ -492,7 +513,8 @@ def create_or_update_podio_scheduled_visit(
 async def get_market_research(
     lc_id: Optional[int] = Query(None, description="Filter by LC id (EXPA/LC_CODES id); only items for this LC are returned"),
     params: PaginationParams = Depends(),
-    podio_client: PodioClient = Depends(get_podio_client),
+    db: Session = Depends(get_db),
+    podio_client: Optional[PodioClient] = Depends(get_optional_podio_client),
 ):
     """
     Fetch market research data from Podio.
@@ -501,6 +523,18 @@ async def get_market_research(
     Otherwise fetches a page and filters in memory (fallback).
     """
     try:
+        snapshot_items, snapshot_total = list_snapshot_items(db, params.page, params.limit, lc_id)
+        if snapshot_total > 0:
+            return build_pagination_response(
+                list(snapshot_items),
+                snapshot_total,
+                params.page,
+                params.limit,
+            )
+
+        if podio_client is None:
+            return build_pagination_response([], 0, params.page, params.limit)
+
         use_podio_filter = (
             lc_id is not None
             and getattr(settings, "PODIO_MARKET_RESEARCH_LC_FIELD_ID", None) is not None
@@ -513,29 +547,12 @@ async def get_market_research(
                 use_podio_filter = False
 
         if use_podio_filter and settings.PODIO_MARKET_RESEARCH_LC_FIELD_ID is not None and option_ids:
-            # Fast path: Podio returns only matching items (small payload, no timeout from huge fetch).
             filter_key = str(settings.PODIO_MARKET_RESEARCH_LC_FIELD_ID)
-            items = podio_client.get_app_items_filtered(
-                filters={filter_key: option_ids},
-                limit=params.limit,
-                offset=params.skip,
-            )
-            mapped_items = [
-                map_podio_item_to_market_research(item)
-                for item in items
-                if isinstance(item, dict)
-            ]
+            items = podio_client.get_app_items_filtered(filters={filter_key: option_ids}, limit=params.limit, offset=params.skip)
+            mapped_items = [map_podio_item_to_market_research(item) for item in items if isinstance(item, dict)]
         else:
-            # Fallback: fetch page then filter by LC name in memory (or no lc_id = show all for this page).
-            items = podio_client.get_app_items(
-                limit=params.limit,
-                offset=params.skip,
-            )
-            mapped_items = [
-                map_podio_item_to_market_research(item)
-                for item in items
-                if isinstance(item, dict)
-            ]
+            items = podio_client.get_app_items(limit=params.limit, offset=params.skip)
+            mapped_items = [map_podio_item_to_market_research(item) for item in items if isinstance(item, dict)]
             if lc_id is not None and getattr(settings, "EXPA_LC_NAMES", None):
                 lc_names = settings.EXPA_LC_NAMES
                 lc_name_used = lc_names.get(lc_id) or (lc_names.get(int(lc_id)) if lc_id is not None else None)
@@ -546,7 +563,10 @@ async def get_market_research(
                         allowed.add("alex")
                     mapped_items = [m for m in mapped_items if m.local_committee and m.local_committee.strip().lower() in allowed]
 
-        # Note: podio total might be larger, but we just simulate it to keep hasNextPage true if we got back a full page
+        if mapped_items:
+            upsert_snapshot_items(db, mapped_items)
+            db.commit()
+
         simulated_total = params.skip + len(mapped_items) + (1 if len(mapped_items) == params.limit else 0)
         return build_pagination_response(
             list(mapped_items),
@@ -908,15 +928,31 @@ def update_b2b_market_research_status(
         )
 
 
+@router.get("/sync-status", tags=["market-research"])
+def get_market_research_sync_status(db: Session = Depends(get_db)):
+    return get_sync_status_payload(db, settings.PODIO_MR_SYNC_INTERVAL_MINUTES)
+
+
 @router.get("/{item_id}", response_model=MarketResearchItem, tags=["market-research"])
 async def get_market_research_item(
     item_id: int,
-    podio_client: PodioClient = Depends(get_podio_client),
+    db: Session = Depends(get_db),
+    podio_client: Optional[PodioClient] = Depends(get_optional_podio_client),
 ):
     """Get a single market research item by Podio item ID. Defined last so static paths (e.g. /podio-lc-options) match first."""
+    cached_row = db.get(MarketResearchSnapshot, item_id)
+    if cached_row is not None:
+        return to_market_research_item(cached_row)
+
+    if podio_client is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found in snapshot")
+
     try:
         item = podio_client.get_item(item_id)
-        return map_podio_item_to_market_research(item)
+        mapped = map_podio_item_to_market_research(item)
+        upsert_snapshot_items(db, [mapped])
+        db.commit()
+        return mapped
     except requests.exceptions.RequestException as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND if e.response and e.response.status_code == 404 else status.HTTP_502_BAD_GATEWAY,

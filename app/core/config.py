@@ -126,6 +126,8 @@ class Settings:
     # Optional: Podio filter by LC (faster than fetch-all then filter). Set to use POST /item/app/{id}/filter/
     PODIO_MARKET_RESEARCH_LC_FIELD_ID: Optional[int]  # Podio field_id for Local Committee (category)
     PODIO_LC_OPTION_IDS: Optional[Dict[str, List[int]]]  # e.g. {"899": [123, 456]} = lc_id 899 -> Podio category option ids
+    PODIO_MR_SYNC_INTERVAL_MINUTES: int
+    PODIO_MR_SYNC_PAGE_SIZE: int
 
     # Google Calendar
     GOOGLE_CLIENT_ID: Optional[str]
@@ -214,6 +216,8 @@ class Settings:
             PODIO_FIELD_ASSIGNED_TO=_env("PODIO_FIELD_ASSIGNED_TO", "assigned-to") or "assigned-to",
             PODIO_MARKET_RESEARCH_LC_FIELD_ID=_env_int_optional("PODIO_MARKET_RESEARCH_LC_FIELD_ID"),
             PODIO_LC_OPTION_IDS=_env_json_lc_option_ids("PODIO_LC_OPTION_IDS"),
+            PODIO_MR_SYNC_INTERVAL_MINUTES=_env_int("PODIO_MR_SYNC_INTERVAL_MINUTES", 5),
+            PODIO_MR_SYNC_PAGE_SIZE=_env_int("PODIO_MR_SYNC_PAGE_SIZE", 500),
             GOOGLE_CLIENT_ID=_env("GOOGLE_CLIENT_ID"),
             GOOGLE_CLIENT_SECRET=_env("GOOGLE_CLIENT_SECRET"),
             GOOGLE_CALENDAR_REDIRECT_URI=_env("GOOGLE_CALENDAR_REDIRECT_URI"),
