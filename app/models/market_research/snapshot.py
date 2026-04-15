@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -12,7 +12,7 @@ from app.db.base import Base
 class MarketResearchSnapshot(Base):
     __tablename__ = "market_research_snapshot"
 
-    item_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    item_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     company_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True, index=True)
     product: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sub_project_igv: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
