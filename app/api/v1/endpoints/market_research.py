@@ -533,9 +533,13 @@ async def get_market_research(
     Otherwise fetches a page and filters in memory (fallback).
     """
     try:
+        option_ids: Optional[List[int]] = None
+        if lc_id is not None and settings.PODIO_LC_OPTION_IDS:
+            option_ids = settings.PODIO_LC_OPTION_IDS.get(str(lc_id)) or settings.PODIO_LC_OPTION_IDS.get(str(int(lc_id)))
+
         if response is not None:
             _set_snapshot_headers(response, db)
-        snapshot_items, snapshot_total = list_snapshot_items(db, params.page, params.limit, lc_id)
+        snapshot_items, snapshot_total = list_snapshot_items(db, params.page, params.limit, lc_id, option_ids)
         if snapshot_total > 0:
             return build_pagination_response(
                 list(snapshot_items),
@@ -544,7 +548,7 @@ async def get_market_research(
                 params.limit,
             )
 
-        if podio_client is None:
+        if podio_client is None or (lc_id is not None and not option_ids):
             return build_pagination_response([], 0, params.page, params.limit)
 
         use_podio_filter = (
@@ -552,11 +556,8 @@ async def get_market_research(
             and getattr(settings, "PODIO_MARKET_RESEARCH_LC_FIELD_ID", None) is not None
             and getattr(settings, "PODIO_LC_OPTION_IDS", None) is not None
         )
-        option_ids: Optional[List[int]] = None
-        if use_podio_filter and settings.PODIO_LC_OPTION_IDS:
-            option_ids = settings.PODIO_LC_OPTION_IDS.get(str(lc_id)) or settings.PODIO_LC_OPTION_IDS.get(str(int(lc_id)))
-            if not option_ids:
-                use_podio_filter = False
+        if use_podio_filter and not option_ids:
+            use_podio_filter = False
 
         if use_podio_filter and settings.PODIO_MARKET_RESEARCH_LC_FIELD_ID is not None and option_ids:
             filter_key = str(settings.PODIO_MARKET_RESEARCH_LC_FIELD_ID)
@@ -565,15 +566,8 @@ async def get_market_research(
         else:
             items = podio_client.get_app_items(limit=params.limit, offset=params.skip)
             mapped_items = [map_podio_item_to_market_research(item) for item in items if isinstance(item, dict)]
-            if lc_id is not None and getattr(settings, "EXPA_LC_NAMES", None):
-                lc_names = settings.EXPA_LC_NAMES
-                lc_name_used = lc_names.get(lc_id) or (lc_names.get(int(lc_id)) if lc_id is not None else None)
-                if lc_name_used and isinstance(lc_name_used, str):
-                    match = lc_name_used.strip().lower()
-                    allowed = {match}
-                    if match == "alexandria":
-                        allowed.add("alex")
-                    mapped_items = [m for m in mapped_items if m.local_committee and m.local_committee.strip().lower() in allowed]
+            if lc_id is not None and option_ids:
+                mapped_items = [m for m in mapped_items if m.local_committee_id in set(option_ids)]
 
         if mapped_items:
             upsert_snapshot_items(db, mapped_items)

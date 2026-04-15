@@ -115,12 +115,21 @@ def get_sync_status_payload(db: Session, staleness_target_minutes: int) -> Dict[
     }
 
 
-def list_snapshot_items(db: Session, page: int, limit: int, lc_id: Optional[int] = None) -> tuple[list[MarketResearchItem], int]:
+def list_snapshot_items(
+    db: Session,
+    page: int,
+    limit: int,
+    lc_id: Optional[int] = None,
+    lc_option_ids: Optional[List[int]] = None,
+) -> tuple[list[MarketResearchItem], int]:
     q = select(MarketResearchSnapshot).order_by(MarketResearchSnapshot.item_id.desc())
     count_q = select(func.count()).select_from(MarketResearchSnapshot)
     if lc_id is not None:
-        q = q.where(MarketResearchSnapshot.local_committee_id == lc_id)
-        count_q = count_q.where(MarketResearchSnapshot.local_committee_id == lc_id)
+        if lc_option_ids:
+            q = q.where(MarketResearchSnapshot.local_committee_id.in_(lc_option_ids))
+            count_q = count_q.where(MarketResearchSnapshot.local_committee_id.in_(lc_option_ids))
+        else:
+            return [], 0
     total = int(db.execute(count_q).scalar() or 0)
     rows = db.execute(q.offset((page - 1) * limit).limit(limit)).scalars().all()
     return [to_market_research_item(row) for row in rows], total
