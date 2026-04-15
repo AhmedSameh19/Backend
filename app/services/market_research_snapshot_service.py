@@ -124,3 +124,7 @@ def list_snapshot_items(db: Session, page: int, limit: int, lc_id: Optional[int]
     total = int(db.execute(count_q).scalar() or 0)
     rows = db.execute(q.offset((page - 1) * limit).limit(limit)).scalars().all()
     return [to_market_research_item(row) for row in rows], total
+
+
+def snapshot_max_item_id(db: Session) -> Optional[int]:
+    return db.execute(select(func.max(MarketResearchSnapshot.item_id))).scalar()

@@ -3,6 +3,7 @@ from celery.schedules import crontab
 from app.core.config import settings
 
 _mr_sync_interval_minutes = max(1, int(settings.PODIO_MR_SYNC_INTERVAL_MINUTES))
+_mr_full_sync_hours = max(1, int(settings.PODIO_MR_FULL_SYNC_HOURS))
 
 broker = settings.RABBITMQ_URL
 backend = settings.REDIS_URL
@@ -63,6 +64,10 @@ celery.conf.beat_schedule = {
     "sync-podio-market-research-snapshot": {
         "task": "podio.sync_market_research_snapshot",
         "schedule": crontab(minute=f"*/{_mr_sync_interval_minutes}"),
+    },
+    "sync-podio-market-research-snapshot-full": {
+        "task": "podio.sync_market_research_snapshot_full",
+        "schedule": crontab(minute=0, hour=f"*/{_mr_full_sync_hours}"),
     },
 }
 celery.conf.broker_connection_retry_on_startup = True

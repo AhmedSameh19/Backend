@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -77,6 +77,14 @@ def get_optional_podio_client() -> Optional[PodioClient]:
         app_id=settings.PODIO_APP_ID,
         app_token=settings.PODIO_APP_TOKEN,
     )
+
+
+def _set_snapshot_headers(response: Response, db: Session) -> None:
+    status_payload = get_sync_status_payload(db, settings.PODIO_MR_SYNC_INTERVAL_MINUTES)
+    response.headers["X-MR-Snapshot-Stale"] = str(bool(status_payload.get("is_stale"))).lower()
+    last_success_at = status_payload.get("last_success_at")
+    if last_success_at:
+        response.headers["X-MR-Snapshot-Last-Success"] = str(last_success_at)
 
 
 def _dict_to_display_text(d: dict) -> Optional[str]:
@@ -511,6 +519,7 @@ def create_or_update_podio_scheduled_visit(
 
 @router.get("", response_model=PaginatedResponse[Any], tags=["market-research"])
 async def get_market_research(
+    response: Response,
     lc_id: Optional[int] = Query(None, description="Filter by LC id (EXPA/LC_CODES id); only items for this LC are returned"),
     params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
@@ -523,6 +532,8 @@ async def get_market_research(
     Otherwise fetches a page and filters in memory (fallback).
     """
     try:
+        if response is not None:
+            _set_snapshot_headers(response, db)
         snapshot_items, snapshot_total = list_snapshot_items(db, params.page, params.limit, lc_id)
         if snapshot_total > 0:
             return build_pagination_response(
@@ -935,11 +946,14 @@ def get_market_research_sync_status(db: Session = Depends(get_db)):
 
 @router.get("/{item_id}", response_model=MarketResearchItem, tags=["market-research"])
 async def get_market_research_item(
+    response: Response,
     item_id: int,
     db: Session = Depends(get_db),
     podio_client: Optional[PodioClient] = Depends(get_optional_podio_client),
 ):
     """Get a single market research item by Podio item ID. Defined last so static paths (e.g. /podio-lc-options) match first."""
+    if response is not None:
+        _set_snapshot_headers(response, db)
     cached_row = db.get(MarketResearchSnapshot, item_id)
     if cached_row is not None:
         return to_market_research_item(cached_row)
