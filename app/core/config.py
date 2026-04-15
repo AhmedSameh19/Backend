@@ -41,7 +41,17 @@ def _env_json_lc_option_ids(name: str) -> Optional[Dict[str, List[int]]]:
     """Parse env like PODIO_LC_OPTION_IDS='{"899":[123,456]}' -> {"899": [123, 456]}."""
     raw = _env(name)
     if not raw or not raw.strip():
-        return None
+        if name == "PODIO_LC_OPTION_IDS":
+            # Default mapping for Accelerator Egypt production Podio app (Local Committee field).
+            # If Coolify omits PODIO_LC_OPTION_IDS, LC-filtered reads would otherwise return empty.
+            raw = (
+                '{"1609":[19],"1789":[1],"5688":[26],"257":[2],"1064":[3],"2820":[4],'
+                '"1788":[6],"2124":[7],"1114":[8],"171":[9],"109":[10],"1725":[11],'
+                '"899":[12],"1727":[13],"2126":[14],"2818":[15],"2125":[16],"15":[17],'
+                '"2817":[21],"1489":[22],"6683":[28]}'
+            )
+        else:
+            return None
     try:
         data = json.loads(raw)
         if not isinstance(data, dict):
@@ -218,7 +228,7 @@ class Settings:
                 "https://podio.com/webforms/25879454/1936053",
             ) or "https://podio.com/webforms/25879454/1936053",
             PODIO_FIELD_ASSIGNED_TO=_env("PODIO_FIELD_ASSIGNED_TO", "assigned-to") or "assigned-to",
-            PODIO_MARKET_RESEARCH_LC_FIELD_ID=_env_int_optional("PODIO_MARKET_RESEARCH_LC_FIELD_ID"),
+            PODIO_MARKET_RESEARCH_LC_FIELD_ID=_env_int_optional("PODIO_MARKET_RESEARCH_LC_FIELD_ID") or 221098564,
             PODIO_LC_OPTION_IDS=_env_json_lc_option_ids("PODIO_LC_OPTION_IDS"),
             PODIO_MR_SYNC_INTERVAL_MINUTES=_env_int("PODIO_MR_SYNC_INTERVAL_MINUTES", 5),
             PODIO_MR_SYNC_PAGE_SIZE=_env_int("PODIO_MR_SYNC_PAGE_SIZE", 500),
