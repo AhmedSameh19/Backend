@@ -145,7 +145,14 @@ def _field_value_to_id(field: dict) -> Optional[int]:
         return None
     value = values[0]
     if isinstance(value, dict):
-        opt_id = value.get("value") or value.get("id")
+        raw = value.get("value")
+        opt_id = None
+        if isinstance(raw, dict):
+            opt_id = raw.get("id") or raw.get("value")
+        else:
+            opt_id = raw
+        if opt_id is None:
+            opt_id = value.get("id")
         if opt_id is not None:
             return int(opt_id) if isinstance(opt_id, (int, float)) else None
         return None
