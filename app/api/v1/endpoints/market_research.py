@@ -24,6 +24,7 @@ from app.services.market_research_snapshot_service import (
     to_market_research_item,
     upsert_snapshot_items,
 )
+from app.workers.celery_app import celery
 from app.models.members import Member
 from app.schemas.market_research import (
     MarketResearchItem,
@@ -942,6 +943,15 @@ def update_b2b_market_research_status(
 @router.get("/sync-status", tags=["market-research"])
 def get_market_research_sync_status(db: Session = Depends(get_db)):
     return get_sync_status_payload(db, settings.PODIO_MR_SYNC_INTERVAL_MINUTES)
+
+
+@router.post("/sync-now", tags=["market-research"])
+def trigger_market_research_sync(mode: str = Query("incremental", pattern="^(incremental|full)$")):
+    if mode == "full":
+        task = celery.send_task("podio.sync_market_research_snapshot_full")
+    else:
+        task = celery.send_task("podio.sync_market_research_snapshot")
+    return {"ok": True, "queued": True, "mode": mode, "task_id": task.id}
 
 
 @router.get("/{item_id}", response_model=MarketResearchItem, tags=["market-research"])
