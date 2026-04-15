@@ -65,11 +65,12 @@ celery.conf.beat_schedule = {
         "task": "podio.sync_market_research_snapshot",
         "schedule": crontab(minute=f"*/{_mr_sync_interval_minutes}"),
     },
-    "sync-podio-market-research-snapshot-full": {
+}
+if settings.PODIO_MR_ENABLE_FULL_SYNC_BEAT:
+    celery.conf.beat_schedule["sync-podio-market-research-snapshot-full"] = {
         "task": "podio.sync_market_research_snapshot_full",
         "schedule": crontab(minute=0, hour=f"*/{_mr_full_sync_hours}"),
-    },
-}
+    }
 celery.conf.broker_connection_retry_on_startup = True
 
 celery.autodiscover_tasks(["app.workers"])

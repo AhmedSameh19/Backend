@@ -947,7 +947,32 @@ def get_market_research_sync_status(db: Session = Depends(get_db)):
 
 
 @router.post("/sync-now", tags=["market-research"])
-def trigger_market_research_sync(mode: str = Query("incremental", pattern="^(incremental|full)$")):
+def trigger_market_research_sync(
+    mode: str = Query("incremental", pattern="^(incremental|full)$"),
+    db: Session = Depends(get_db),
+):
+    if mode == "full":
+        state = get_sync_status_payload(db, settings.PODIO_MR_SYNC_INTERVAL_MINUTES)
+        last_run_at = state.get("last_run_at")
+        cooldown_minutes = max(1, settings.PODIO_MR_FULL_SYNC_COOLDOWN_MINUTES)
+        if last_run_at:
+            if isinstance(last_run_at, str):
+                try:
+                    last_run = datetime.fromisoformat(last_run_at)
+                except Exception:
+                    last_run = None
+            else:
+                last_run = last_run_at
+            if last_run is not None:
+                if last_run.tzinfo is None:
+                    last_run = last_run.replace(tzinfo=timezone.utc)
+                elapsed = (datetime.now(timezone.utc) - last_run).total_seconds() / 60
+                if elapsed < cooldown_minutes:
+                    raise HTTPException(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        detail=f"Full sync is rate-limited. Try again in {int(cooldown_minutes - elapsed) + 1} minutes.",
+                    )
+
     if mode == "full":
         task = celery.send_task("podio.sync_market_research_snapshot_full")
     else:
