@@ -52,19 +52,28 @@ def _env_json_lc_option_ids(name: str) -> Optional[Dict[str, List[int]]]:
             )
         else:
             return None
-    try:
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            return None
-        out: Dict[str, List[int]] = {}
-        for k, v in data.items():
-            if isinstance(v, list):
-                out[str(k)] = [int(x) for x in v if isinstance(x, (int, float))]
-            elif isinstance(part_v := v, (int, float)):
-                out[str(k)] = [int(part_v)]
-        return out if out else None
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return None
+    candidates = [raw]
+    if '\\"' in raw:
+        candidates.append(raw.replace('\\"', '"'))
+    if raw.startswith('"') and raw.endswith('"'):
+        candidates.append(raw[1:-1])
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate)
+            if not isinstance(data, dict):
+                continue
+            out: Dict[str, List[int]] = {}
+            for k, v in data.items():
+                if isinstance(v, list):
+                    out[str(k)] = [int(x) for x in v if isinstance(x, (int, float))]
+                elif isinstance(part_v := v, (int, float)):
+                    out[str(k)] = [int(part_v)]
+            if out:
+                return out
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+    return None
 
 
 def _env_csv_ints(name: str, default: List[int]) -> List[int]:
