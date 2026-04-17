@@ -97,7 +97,12 @@ def create_icx_followup(
         db.add(followup)
         db.commit()
         db.refresh(followup)
-        return followup
+
+        res = ICXFollowUpOut.model_validate(followup)
+        if lead:
+            res.lead_name = lead.full_name
+            res.lead_phone = lead.phone
+        return res
 
     except HTTPException:
         raise
