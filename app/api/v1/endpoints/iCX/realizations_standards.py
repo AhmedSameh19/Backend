@@ -46,9 +46,12 @@ def patch_icx_realizations_standards(
         if not updates:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
 
-        realization = db.get(ExpaICXRealization, str(application_id))
+        realization = db.execute(
+            select(ExpaICXRealization).where(ExpaICXRealization.application_id == str(application_id))
+        ).scalars().first()
+
         if not realization:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Realization not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Realization not found for ID: {application_id}")
 
         standards = (
             db.execute(
