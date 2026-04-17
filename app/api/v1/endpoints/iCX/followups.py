@@ -30,7 +30,8 @@ def get_icx_followups_by_member(
 ) -> list[ICXFollowUpOut]:
     try:
         stmt = (
-            select(ExpaICXLeadFollowUp)
+            select(ExpaICXLeadFollowUp, ExpaICXLead.full_name, ExpaICXLead.phone)
+            .join(ExpaICXLead, ExpaICXLead.application_id == ExpaICXLeadFollowUp.application_id)
             .where(ExpaICXLeadFollowUp.created_by_member_id == created_by_member_id)
             .order_by(
                 ExpaICXLeadFollowUp.follow_up_at.desc(),
@@ -38,7 +39,14 @@ def get_icx_followups_by_member(
                 ExpaICXLeadFollowUp.id.desc(),
             )
         )
-        return db.execute(stmt).scalars().all()
+        results = db.execute(stmt).all()
+        output = []
+        for follow_up, full_name, phone in results:
+            follow_up_out = ICXFollowUpOut.model_validate(follow_up)
+            follow_up_out.lead_name = full_name
+            follow_up_out.lead_phone = phone
+            output.append(follow_up_out)
+        return output
     except SQLAlchemyError as e:
         logger.exception("DB error in get_icx_followups_by_member(created_by_member_id=%s)", created_by_member_id)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database error") from e
@@ -107,7 +115,8 @@ def create_icx_followup(
 def list_icx_followups(application_id: str, db: Session = Depends(get_db)) -> list[ICXFollowUpOut]:
     try:
         stmt = (
-            select(ExpaICXLeadFollowUp)
+            select(ExpaICXLeadFollowUp, ExpaICXLead.full_name, ExpaICXLead.phone)
+            .join(ExpaICXLead, ExpaICXLead.application_id == ExpaICXLeadFollowUp.application_id)
             .where(ExpaICXLeadFollowUp.application_id == str(application_id))
             .order_by(
                 ExpaICXLeadFollowUp.follow_up_at.desc(),
@@ -115,7 +124,14 @@ def list_icx_followups(application_id: str, db: Session = Depends(get_db)) -> li
                 ExpaICXLeadFollowUp.id.desc(),
             )
         )
-        return db.execute(stmt).scalars().all()
+        results = db.execute(stmt).all()
+        output = []
+        for follow_up, full_name, phone in results:
+            follow_up_out = ICXFollowUpOut.model_validate(follow_up)
+            follow_up_out.lead_name = full_name
+            follow_up_out.lead_phone = phone
+            output.append(follow_up_out)
+        return output
     except SQLAlchemyError as e:
         logger.exception("DB error in list_icx_followups(application_id=%s)", application_id)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database error") from e

@@ -21,6 +21,8 @@ class ICXFollowUpOut(BaseModel):
 
     id: int
     application_id: str
+    lead_name: Optional[str] = None
+    lead_phone: Optional[str] = None
     follow_up_text: str
     follow_up_at: datetime
     status: ICXFollowUpStatus

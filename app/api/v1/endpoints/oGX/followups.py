@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.leads.expa_lead_followups import ExpaLeadFollowUp
+from app.models.leads.expa_leads import ExpaLead
 from app.models.members import Member
 from app.schemas.leads.followups import FollowUpCreate, FollowUpOut, FollowUpStatusUpdate
 
@@ -90,7 +91,8 @@ def get_followups_by_member(
 ) -> list[FollowUpOut]:
 	try:
 		stmt = (
-			select(ExpaLeadFollowUp)
+			select(ExpaLeadFollowUp, ExpaLead.full_name, ExpaLead.phone)
+			.join(ExpaLead, ExpaLead.expa_person_id == ExpaLeadFollowUp.expa_person_id)
 			.where(ExpaLeadFollowUp.created_by_member_id == created_by_member_id)
 			.order_by(
 				ExpaLeadFollowUp.follow_up_at.desc(),
@@ -98,7 +100,14 @@ def get_followups_by_member(
 				ExpaLeadFollowUp.id.desc(),
 			)
 		)
-		return db.execute(stmt).scalars().all()
+		results = db.execute(stmt).all()
+		output = []
+		for follow_up, full_name, phone in results:
+			follow_up_out = FollowUpOut.model_validate(follow_up)
+			follow_up_out.lead_name = full_name
+			follow_up_out.lead_phone = phone
+			output.append(follow_up_out)
+		return output
 	except HTTPException:
 		raise
 	except SQLAlchemyError:
@@ -121,7 +130,8 @@ def list_followups(
 ) -> list[FollowUpOut]:
 	try:
 		stmt = (
-			select(ExpaLeadFollowUp)
+			select(ExpaLeadFollowUp, ExpaLead.full_name, ExpaLead.phone)
+			.join(ExpaLead, ExpaLead.expa_person_id == ExpaLeadFollowUp.expa_person_id)
 			.where(ExpaLeadFollowUp.expa_person_id == expa_person_id)
 			.order_by(
 				ExpaLeadFollowUp.follow_up_at.desc(),
@@ -129,7 +139,14 @@ def list_followups(
 				ExpaLeadFollowUp.id.desc(),
 			)
 		)
-		return db.execute(stmt).scalars().all()
+		results = db.execute(stmt).all()
+		output = []
+		for follow_up, full_name, phone in results:
+			follow_up_out = FollowUpOut.model_validate(follow_up)
+			follow_up_out.lead_name = full_name
+			follow_up_out.lead_phone = phone
+			output.append(follow_up_out)
+		return output
 	except HTTPException:
 		raise
 	except SQLAlchemyError:
