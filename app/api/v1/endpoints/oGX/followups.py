@@ -66,11 +66,12 @@ def create_followup(
 
 	except HTTPException:
 		raise
-	except SQLAlchemyError:
+	except SQLAlchemyError as e:
 		db.rollback()
+		print(f"SQLAlchemyError: {e}")
 		raise HTTPException(
 			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-			detail="Database error",
+			detail=f"Database error: {str(e)}",
 		)
 	except Exception:
 		db.rollback()

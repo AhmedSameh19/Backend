@@ -96,11 +96,11 @@ def create_icx_followup(
     except SQLAlchemyError as e:
         db.rollback()
         logger.exception("DB error in create_icx_followup(application_id=%s)", payload.application_id)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database error") from e
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Database error: {str(e)}") from e
     except Exception as e:
         db.rollback()
         logger.exception("Unexpected error in create_icx_followup(application_id=%s)", payload.application_id)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}") from e
 
 
 @router.get("/{application_id}/followups", response_model=list[ICXFollowUpOut])
