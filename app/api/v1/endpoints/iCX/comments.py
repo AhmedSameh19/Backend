@@ -30,13 +30,12 @@ def add_icx_comment(
             raise HTTPException(status_code=404, detail="Lead not found")
 
         member = db.execute(select(Member).where(Member.expa_person_id == payload.created_by)).scalars().first()
-        if not member:
-            raise HTTPException(status_code=404, detail="Member not found")
+
 
         comment = ExpaICXLeadComment(
             application_id=str(application_id),
             comment=payload.text,
-            creator_name=member.full_name,
+            creator_name=member.full_name if member else payload.created_by,
         )
 
         db.add(comment)

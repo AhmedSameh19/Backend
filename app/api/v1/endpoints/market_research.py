@@ -676,11 +676,9 @@ def assign_company_to_member(
     )
     if not member:
         member = db.get(Member, payload.member_id)
-    if not member:
-        raise HTTPException(status_code=404, detail="Member not found")
     return {
         "ok": True,
-        "assigned_to": {"member_id": payload.member_id, "member_name": member.full_name},
+        "assigned_to": {"member_id": payload.member_id, "member_name": member.full_name if member else payload.member_id},
     }
 
 

@@ -27,13 +27,12 @@ def add_comment(
             .where(Member.expa_person_id == payload.created_by)
         )
         member = db.execute(stmt).scalars().first()
-        if not member:
-            raise HTTPException(status_code=404, detail="Member not found")
+
 
         comment = ExpaLeadComment(
             expa_person_id=expa_person_id,
             comment=payload.text,
-            creator_name=member.full_name,
+            creator_name=member.full_name if member else payload.created_by,
         )
 
         db.add(comment)

@@ -9,7 +9,7 @@ from app.models.members import Member
 from app.models.leads.expa_lead_realizations import ExpaLeadRealization
 from app.schemas.leads.leads import LeadBulkAssignRequest
 from app.utils.pagination import PaginatedResponse, PaginationParams, build_pagination_response
-from sqlalchemy import desc, asc, func
+from sqlalchemy import desc, asc, func, or_
 from typing import Any
 
 router = APIRouter(prefix="/realizations", tags=["Realizations"])
@@ -28,6 +28,16 @@ def get_realizations(
             query = select(ExpaLeadRealization)
         else:
             query = select(ExpaLeadRealization).where(ExpaLeadRealization.home_lc_id == home_lc_id)
+
+        if params.search:
+            search_t = f"%{params.search}%"
+            query = query.filter(
+                or_(
+                    ExpaLeadRealization.full_name.ilike(search_t),
+                    ExpaLeadRealization.email.ilike(search_t),
+                    ExpaLeadRealization.contact_number.ilike(search_t)
+                )
+            )
 
         total = db.execute(select(func.count()).select_from(query.subquery())).scalar() or 0
 
@@ -67,8 +77,7 @@ def bulk_assign_realizations(
 
         stmt = select(Member).where(Member.expa_person_id == payload.member_id)
         member = db.execute(stmt).scalars().first()
-        if not member:
-            raise HTTPException(status_code=404, detail="Member not found")
+
 
         stmt = select(ExpaLeadRealization.expa_person_id).where(
             ExpaLeadRealization.expa_person_id.in_(payload.expa_person_ids)
@@ -85,7 +94,7 @@ def bulk_assign_realizations(
             .update(
                 {
                     ExpaLeadRealization.assigned_member_id: payload.member_id,
-                    ExpaLeadRealization.assigned_member_name: member.full_name,
+                    ExpaLeadRealization.assigned_member_name: member.full_name if member else payload.member_id,
                 },
                 synchronize_session=False,
             )
@@ -94,7 +103,7 @@ def bulk_assign_realizations(
 
         return {
             "ok": True,
-            "assigned_to": {"member_id": payload.member_id, "member_name": member.full_name},
+            "assigned_to": {"member_id": payload.member_id, "member_name": member.full_name if member else payload.member_id},
             "requested": len(payload.expa_person_ids),
             "updated": int(updated_count or 0),
             "missing_expa_person_ids": missing_ids,

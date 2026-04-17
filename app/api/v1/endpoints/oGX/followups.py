@@ -46,10 +46,9 @@ def create_followup(
 				.where(Member.expa_person_id == payload.created_by)
 			)
 			member = db.execute(stmt).scalars().first()	
-			if not member:
-				raise HTTPException(status_code=404, detail="Member not found")
+
 			created_by_member_id = payload.created_by
-			created_by_member_name = member.full_name
+			created_by_member_name = member.full_name if member else payload.created_by
 
 		followup = ExpaLeadFollowUp(
 			expa_person_id=expa_person_id,

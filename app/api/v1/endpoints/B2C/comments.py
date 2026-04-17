@@ -30,8 +30,7 @@ def add_comment(
             .scalars()
             .first()
         )
-        if not member:
-            raise HTTPException(status_code=404, detail="Member not found")
+
 
         # TODO: implement real authorization check; for now don't block all valid members
         # if not member.is_authorized_for_b2c:
@@ -40,7 +39,7 @@ def add_comment(
         comment = B2CComment(
             expa_person_id=expa_person_id,
             comment=payload.text,
-            creator_name=member.full_name,
+            creator_name=member.full_name if member else payload.created_by,
         )
 
         db.add(comment)

@@ -72,10 +72,9 @@ def create_icx_followup(
         created_by_member_name = None
         if payload.created_by is not None:
             member = db.execute(select(Member).where(Member.expa_person_id == payload.created_by)).scalars().first()
-            if not member:
-                raise HTTPException(status_code=404, detail="Member not found")
+
             created_by_member_id = payload.created_by
-            created_by_member_name = member.full_name
+            created_by_member_name = member.full_name if member else payload.created_by
 
         followup = ExpaICXLeadFollowUp(
             application_id=str(application_id),

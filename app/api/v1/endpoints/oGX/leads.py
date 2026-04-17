@@ -81,8 +81,7 @@ def bulk_assign_leads(
                 .where(Member.expa_person_id == payload.member_id)
             )
         member = db.execute(stmt).scalars().first()
-        if not member:
-            raise HTTPException(status_code=404, detail="Member not found")
+
 
         stmt = select(ExpaLead.expa_person_id).where(ExpaLead.expa_person_id.in_(payload.expa_person_ids))
         existing_ids = set(db.execute(stmt).scalars().all())
@@ -97,7 +96,7 @@ def bulk_assign_leads(
             .update(
                 {
                     ExpaLead.assigned_member_id: payload.member_id,
-                    ExpaLead.assigned_member_name: member.full_name,
+                    ExpaLead.assigned_member_name: member.full_name if member else payload.member_id,
                 },
                 synchronize_session=False,
             )
@@ -107,7 +106,7 @@ def bulk_assign_leads(
 
         return {
             "ok": True,
-            "assigned_to": {"member_id": payload.member_id, "member_name": member.full_name},
+            "assigned_to": {"member_id": payload.member_id, "member_name": member.full_name if member else payload.member_id},
             "requested": len(payload.expa_person_ids),
             "updated": int(updated_count or 0),
             "missing_expa_person_ids": missing_ids,
@@ -165,11 +164,10 @@ def assign_lead(
             .where(Member.expa_person_id == payload.created_by)
         )
         member = db.execute(stmt).scalars().first()
-        if not member:
-            raise HTTPException(status_code=404, detail="Member not found")
+
 
         lead.assigned_member_id = payload.member_id
-        lead.assigned_member_name = member.full_name
+        lead.assigned_member_name = member.full_name if member else payload.member_id
 
         db.commit()
         db.refresh(lead)
@@ -178,7 +176,7 @@ def assign_lead(
             "ok": True,
             "assigned_to": {
                 "member_id": payload.member_id,
-                "member_name": member.full_name,
+                "member_name": member.full_name if member else payload.member_id,
             },
         }
     except HTTPException:

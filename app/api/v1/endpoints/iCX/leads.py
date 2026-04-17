@@ -79,8 +79,7 @@ def bulk_assign_icx_leads(
         application_ids = [str(x) for x in payload.application_ids]
 
         member = db.execute(select(Member).where(Member.expa_person_id == member_id)).scalars().first()
-        if not member:
-            raise HTTPException(status_code=404, detail="Member not found")
+
 
         stmt = select(ExpaICXLead.application_id).where(ExpaICXLead.application_id.in_(application_ids))
         existing_ids = set(db.execute(stmt).scalars().all())
@@ -95,7 +94,7 @@ def bulk_assign_icx_leads(
             .update(
                 {
                     ExpaICXLead.assigned_member_id: member_id,
-                    ExpaICXLead.assigned_member_name: member.full_name,
+                    ExpaICXLead.assigned_member_name: member.full_name if member else payload.member_id,
                 },
                 synchronize_session=False,
             )
@@ -105,7 +104,7 @@ def bulk_assign_icx_leads(
 
         return {
             "ok": True,
-            "assigned_to": {"member_id": member_id, "member_name": member.full_name},
+            "assigned_to": {"member_id": member_id, "member_name": member.full_name if member else payload.member_id},
             "requested": len(application_ids),
             "updated": int(updated_count or 0),
             "missing_application_ids": missing_ids,
