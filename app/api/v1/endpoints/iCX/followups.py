@@ -64,7 +64,7 @@ def create_icx_followup(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="follow_up_at must be in the future")
 
     try:
-        lead = db.get(ExpaICXLead, str(application_id))
+        lead = db.get(ExpaICXLead, str(payload.application_id))
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
 
