@@ -77,7 +77,7 @@ def create_icx_followup(
             created_by_member_name = member.full_name if member else payload.created_by
 
         followup = ExpaICXLeadFollowUp(
-            application_id=str(application_id),
+            application_id=str(payload.application_id),
             follow_up_text=payload.follow_up_text,
             follow_up_at=follow_up_at,
             status="pending",
