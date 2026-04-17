@@ -65,11 +65,12 @@ def patch_icx_realizations_standards(
 
         standards = (
             db.execute(
-                select(ICXRealizationsStandards).where(ICXRealizationsStandards.application_id == str(application_id))
+                select(ICXRealizationsStandards).where(ICXRealizationsStandards.application_id == realization.application_id)
             )
             .scalars()
             .first()
         )
+
         if not standards:
             standards = ICXRealizationsStandards(
                 application_id=realization.application_id,
@@ -87,9 +88,9 @@ def patch_icx_realizations_standards(
     except HTTPException:
         db.rollback()
         raise
-    except SQLAlchemyError:
+    except SQLAlchemyError as e:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database error")
-    except Exception:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Database error: {str(e)}")
+    except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
