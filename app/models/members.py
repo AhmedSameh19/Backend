@@ -27,6 +27,8 @@ class Member(Base):
     assigned_leads = relationship(
         "ExpaLead",
         back_populates="assigned_member",
+        primaryjoin="Member.expa_person_id == ExpaLead.assigned_member_id",
+        foreign_keys="ExpaLead.assigned_member_id",
     )
     follow_ups_created = relationship(
         "ExpaLeadFollowUp",

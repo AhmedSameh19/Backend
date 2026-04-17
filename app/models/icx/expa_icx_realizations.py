@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -45,11 +45,16 @@ class ExpaICXRealization(Base):
 
     assigned_member_id: Mapped[Optional[str]] = mapped_column(
         Text,
-        ForeignKey("members.expa_person_id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
     assigned_member_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    assigned_member = relationship(
+        "Member",
+        primaryjoin="Member.expa_person_id == ExpaICXRealization.assigned_member_id",
+        foreign_keys=[assigned_member_id]
+    )
 
     last_synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
