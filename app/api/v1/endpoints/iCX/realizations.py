@@ -91,7 +91,7 @@ def bulk_assign_icx_realizations(
             .filter(ExpaICXRealization.application_id.in_(list(existing_ids)))
             .update(
                 {
-                    ExpaICXRealization.assigned_member_id: member_id,
+                    ExpaICXRealization.assigned_member_id: member.expa_person_id if member else None,
                     ExpaICXRealization.assigned_member_name: member.full_name if member else member_id,
                 },
                 synchronize_session=False,

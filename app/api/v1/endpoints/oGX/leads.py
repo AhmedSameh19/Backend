@@ -95,7 +95,7 @@ def bulk_assign_leads(
             .filter(ExpaLead.expa_person_id.in_(list(existing_ids)))
             .update(
                 {
-                    ExpaLead.assigned_member_id: payload.member_id,
+                    ExpaLead.assigned_member_id: member.expa_person_id if member else None,
                     ExpaLead.assigned_member_name: member.full_name if member else payload.member_id,
                 },
                 synchronize_session=False,
@@ -166,7 +166,7 @@ def assign_lead(
         member = db.execute(stmt).scalars().first()
 
 
-        lead.assigned_member_id = payload.member_id
+        lead.assigned_member_id = member.expa_person_id if member else None
         lead.assigned_member_name = member.full_name if member else payload.member_id
 
         db.commit()

@@ -93,7 +93,7 @@ def bulk_assign_realizations(
             .filter(ExpaLeadRealization.expa_person_id.in_(list(existing_ids)))
             .update(
                 {
-                    ExpaLeadRealization.assigned_member_id: payload.member_id,
+                    ExpaLeadRealization.assigned_member_id: member.expa_person_id if member else None,
                     ExpaLeadRealization.assigned_member_name: member.full_name if member else payload.member_id,
                 },
                 synchronize_session=False,

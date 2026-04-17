@@ -93,7 +93,7 @@ def bulk_assign_icx_leads(
             .filter(ExpaICXLead.application_id.in_(list(existing_ids)))
             .update(
                 {
-                    ExpaICXLead.assigned_member_id: member_id,
+                    ExpaICXLead.assigned_member_id: member.expa_person_id if member else None,
                     ExpaICXLead.assigned_member_name: member.full_name if member else payload.member_id,
                 },
                 synchronize_session=False,

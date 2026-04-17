@@ -73,7 +73,7 @@ def create_icx_followup(
         if payload.created_by is not None:
             member = db.execute(select(Member).where(Member.expa_person_id == payload.created_by)).scalars().first()
 
-            created_by_member_id = payload.created_by
+            created_by_member_id = member.expa_person_id if member else None
             created_by_member_name = member.full_name if member else payload.created_by
 
         followup = ExpaICXLeadFollowUp(
