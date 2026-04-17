@@ -122,7 +122,7 @@ def list_followups(
 	try:
 		stmt = (
 			select(ExpaLeadFollowUp)
-			.where(ExpaLeadFollowUp.created_by_member_id == expa_person_id)
+			.where(ExpaLeadFollowUp.expa_person_id == expa_person_id)
 			.order_by(
 				ExpaLeadFollowUp.follow_up_at.desc(),
 				ExpaLeadFollowUp.created_at.desc(),
