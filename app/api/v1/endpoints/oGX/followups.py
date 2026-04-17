@@ -41,14 +41,9 @@ def create_followup(
 		created_by_member_name = None
 
 		if payload.created_by is not None:
-			stmt = (
-				select(Member)
-				.where(Member.expa_person_id == payload.created_by)
-			)
-			member = db.execute(stmt).scalars().first()	
 
 			created_by_member_id = payload.created_by
-			created_by_member_name = member.full_name if member else payload.created_by
+			created_by_member_name =payload.created_by
 
 		followup = ExpaLeadFollowUp(
 			expa_person_id=expa_person_id,
