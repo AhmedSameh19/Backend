@@ -70,10 +70,9 @@ def patch_icx_realizations_standards(
             .scalars()
             .first()
         )
-
         if not standards:
             standards = ICXRealizationsStandards(
-                application_id=str(application_id),
+                application_id=realization.application_id,
                 expa_person_id=realization.expa_person_id,
             )
             db.add(standards)
