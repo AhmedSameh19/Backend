@@ -14,6 +14,8 @@ class ICXFollowUpCreate(BaseModel):
     follow_up_text: str = Field(..., min_length=1)
     follow_up_at: datetime
     created_by: Optional[str] = None
+    lead_name: Optional[str] = None
+    lead_phone: Optional[str] = None
 
 
 class ICXFollowUpOut(BaseModel):

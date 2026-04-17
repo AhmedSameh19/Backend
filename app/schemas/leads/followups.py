@@ -14,6 +14,8 @@ class FollowUpCreate(BaseModel):
 	follow_up_at: datetime
 	created_by: Optional[str] = None
 	status: FollowUpStatus = "pending"
+	lead_name: Optional[str] = None
+	lead_phone: Optional[str] = None
 
 
 class FollowUpOut(BaseModel):

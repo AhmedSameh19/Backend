@@ -58,18 +58,23 @@ def create_followup(
 			status="pending",	
 			created_by_member_id=created_by_member_id,
 			created_by_member_name=created_by_member_name,
+			lead_name=payload.lead_name,
+			lead_phone=payload.lead_phone,
 			created_at=now
 		)
+		
+		# Fallback: if name/phone missing in payload, try to populate from lead table before saving
+		if not followup.lead_name or not followup.lead_phone:
+			lead = db.get(ExpaLead, expa_person_id)
+			if lead:
+				followup.lead_name = followup.lead_name or lead.full_name
+				followup.lead_phone = followup.lead_phone or lead.phone
+
 		db.add(followup)
 		db.commit()
 		db.refresh(followup)
 
-		lead = db.get(ExpaLead, expa_person_id)
-		
 		res = FollowUpOut.model_validate(followup)
-		if lead:
-			res.lead_name = lead.full_name
-			res.lead_phone = lead.phone
 		return res
 
 	except HTTPException:

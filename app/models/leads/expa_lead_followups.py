@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +52,9 @@ class ExpaLeadFollowUp(Base):
         Text,
         nullable=True
     )
+    
+    lead_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lead_phone: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

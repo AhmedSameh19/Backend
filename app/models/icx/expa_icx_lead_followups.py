@@ -50,6 +50,9 @@ class ExpaICXLeadFollowUp(Base):
     )
 
     created_by_member_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    lead_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    lead_phone: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
