@@ -44,7 +44,6 @@ class ExpaLeadFollowUp(Base):
 
     created_by_member_id: Mapped[str] = mapped_column(
         Text,
-        ForeignKey("members.expa_person_id", ondelete="SET NULL"),
         nullable=True
     )
 
@@ -64,5 +63,6 @@ class ExpaLeadFollowUp(Base):
     created_by = relationship(
         "Member",
         back_populates="follow_ups_created",
+        primaryjoin="Member.expa_person_id == ExpaLeadFollowUp.created_by_member_id",
         foreign_keys=[created_by_member_id],
     )
