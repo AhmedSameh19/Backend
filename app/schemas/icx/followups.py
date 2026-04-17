@@ -10,6 +10,7 @@ ICXFollowUpStatus = Literal["pending", "completed"]
 
 
 class ICXFollowUpCreate(BaseModel):
+    application_id: str
     follow_up_text: str = Field(..., min_length=1)
     follow_up_at: datetime
     created_by: Optional[str] = None
