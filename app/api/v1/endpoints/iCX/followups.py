@@ -73,7 +73,7 @@ def create_icx_followup(
         if created_by is not None:
             member = db.execute(select(Member).where(Member.expa_person_id == created_by)).scalars().first()
 
-            created_by_member_id = member.expa_person_id if member else None
+            created_by_member_id = created_by
             created_by_member_name = member.full_name if member else created_by
 
         followup = ExpaICXLeadFollowUp(
@@ -95,11 +95,11 @@ def create_icx_followup(
         raise
     except SQLAlchemyError as e:
         db.rollback()
-        logger.exception("DB error in create_icx_followup(application_id=%s)", application_id)
+        logger.exception("DB error in create_icx_followup(application_id=%s)", payload.application_id)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database error") from e
     except Exception as e:
         db.rollback()
-        logger.exception("Unexpected error in create_icx_followup(application_id=%s)", application_id)
+        logger.exception("Unexpected error in create_icx_followup(application_id=%s)", payload.application_id)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from e
 
 
