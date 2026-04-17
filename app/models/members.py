@@ -31,6 +31,7 @@ class Member(Base):
     follow_ups_created = relationship(
         "ExpaLeadFollowUp",
         back_populates="created_by",
+        primaryjoin="Member.expa_person_id == ExpaLeadFollowUp.created_by_member_id",
         foreign_keys="ExpaLeadFollowUp.created_by_member_id",
         passive_deletes=True
     )

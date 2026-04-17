@@ -34,11 +34,16 @@ class ExpaLeadRealization(Base):
 
 	assigned_member_id: Mapped[Optional[str]] = mapped_column(
 		Text,
-		ForeignKey("members.expa_person_id", ondelete="SET NULL"),
 		nullable=True,
 		index=True,
 	)
 	assigned_member_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+	assigned_member = relationship(
+		"Member",
+		primaryjoin="Member.expa_person_id == ExpaLeadRealization.assigned_member_id",
+		foreign_keys=[assigned_member_id]
+	)
 
 	programme: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 	opp_title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
