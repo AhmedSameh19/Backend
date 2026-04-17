@@ -56,7 +56,6 @@ class ExpaICXLead(Base):
 
     assigned_member_id: Mapped[Optional[str]] = mapped_column(
         Text,
-        ForeignKey("members.expa_person_id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -78,7 +77,11 @@ class ExpaICXLead(Base):
         server_default=func.now(),
     )
 
-    assigned_member = relationship("Member")
+    assigned_member = relationship(
+        "Member",
+        primaryjoin="Member.expa_person_id == ExpaICXLead.assigned_member_id",
+        foreign_keys=[assigned_member_id]
+    )
 
     comments = relationship(
         "ExpaICXLeadComment",

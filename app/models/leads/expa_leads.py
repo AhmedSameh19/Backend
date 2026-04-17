@@ -54,7 +54,6 @@ class ExpaLead(Base):
     )
     assigned_member_id: Mapped[Optional[str]] = mapped_column(
         Text,
-        ForeignKey("members.expa_person_id", ondelete="SET NULL"),
         nullable=True,
         index=True
     )
@@ -102,7 +101,9 @@ class ExpaLead(Base):
 
     assigned_member = relationship(
         "Member",
-        back_populates="assigned_leads"
+        back_populates="assigned_leads",
+        primaryjoin="Member.expa_person_id == ExpaLead.assigned_member_id",
+        foreign_keys=[assigned_member_id]
     )
 
     follow_ups = relationship(
