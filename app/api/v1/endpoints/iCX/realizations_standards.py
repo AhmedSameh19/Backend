@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -22,7 +22,12 @@ def get_icx_realizations_standards(
     db: Session = Depends(get_db),
 ):
     try:
-        stmt = select(ICXRealizationsStandards).where(ICXRealizationsStandards.application_id == str(application_id))
+        stmt = select(ICXRealizationsStandards).where(
+            or_(
+                ICXRealizationsStandards.application_id == str(application_id).strip(),
+                ICXRealizationsStandards.expa_person_id == str(application_id).strip()
+            )
+        )
         standards = db.execute(stmt).scalars().first()
         if not standards:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Standards not found")
@@ -47,7 +52,12 @@ def patch_icx_realizations_standards(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
 
         realization = db.execute(
-            select(ExpaICXRealization).where(ExpaICXRealization.application_id == str(application_id))
+            select(ExpaICXRealization).where(
+                or_(
+                    ExpaICXRealization.application_id == str(application_id).strip(),
+                    ExpaICXRealization.expa_person_id == str(application_id).strip()
+                )
+            )
         ).scalars().first()
 
         if not realization:
