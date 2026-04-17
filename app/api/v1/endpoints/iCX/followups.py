@@ -50,9 +50,9 @@ def get_icx_followups_by_member(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from e
 
 
-@router.post("/{application_id}/followups", response_model=ICXFollowUpOut)
+@router.post("/{created_by}/followups", response_model=ICXFollowUpOut)
 def create_icx_followup(
-    application_id: str,
+    created_by: str,
     payload: ICXFollowUpCreate,
     db: Session = Depends(get_db),
 ) -> ICXFollowUpOut:
@@ -70,11 +70,11 @@ def create_icx_followup(
 
         created_by_member_id = None
         created_by_member_name = None
-        if payload.created_by is not None:
-            member = db.execute(select(Member).where(Member.expa_person_id == payload.created_by)).scalars().first()
+        if created_by is not None:
+            member = db.execute(select(Member).where(Member.expa_person_id == created_by)).scalars().first()
 
             created_by_member_id = member.expa_person_id if member else None
-            created_by_member_name = member.full_name if member else payload.created_by
+            created_by_member_name = member.full_name if member else created_by
 
         followup = ExpaICXLeadFollowUp(
             application_id=str(payload.application_id),
