@@ -41,3 +41,29 @@ def upsert_expa_leads(db: Session, rows: List[Dict[str, Any]]) -> int:
 
     result = db.execute(stmt)
     return result.rowcount or 0
+
+
+def sync_leads_for_lc(db: Session, rows: List[Dict[str, Any]], home_lc_id: int) -> Dict[str, int]:
+    """Full sync for leads of an LC: adds/updates current leads and DELETES those no longer in the list."""
+    if not rows:
+        # If no leads returned for this LC, delete all existing for this LC
+        delete_stmt = ExpaLead.__table__.delete().where(ExpaLead.home_lc_id == home_lc_id)
+        res = db.execute(delete_stmt)
+        return {"upserted": 0, "deleted": res.rowcount or 0}
+
+    # Identify leads to keep
+    new_expa_person_ids = {str(r["expa_person_id"]) for r in rows if r.get("expa_person_id")}
+
+    # Delete leads in this LC who are NOT in the new batch
+    delete_stmt = (
+        ExpaLead.__table__.delete()
+        .where(ExpaLead.home_lc_id == home_lc_id)
+        .where(ExpaLead.expa_person_id.notin_(list(new_expa_person_ids)))
+    )
+    delete_res = db.execute(delete_stmt)
+    deleted_count = delete_res.rowcount or 0
+
+    # Upsert the current batch
+    upserted_count = upsert_expa_leads(db, rows)
+
+    return {"upserted": upserted_count, "deleted": deleted_count}
