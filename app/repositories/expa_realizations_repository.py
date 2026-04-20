@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from sqlalchemy import tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -36,3 +37,47 @@ def upsert_expa_realizations(db: Session, rows: List[Dict[str, Any]]) -> int:
 
     result = db.execute(stmt)
     return result.rowcount or 0
+
+def sync_realizations_for_lc(db: Session, rows: List[Dict[str, Any]], home_lc_id: int) -> Dict[str, int]:
+    """Full sync for realizations of an LC: adds/updates current realizations and DELETES those no longer in the list."""
+    if not rows:
+        # If no realizations returned for this LC, delete all existing for this LC
+        delete_stmt = ExpaLeadRealization.__table__.delete().where(ExpaLeadRealization.home_lc_id == home_lc_id)
+        res = db.execute(delete_stmt)
+        return {"upserted": 0, "deleted": res.rowcount or 0}
+
+    # Identify realizations to keep (composite key: expa_person_id, opp_id)
+    # We use a tuple in the notin_ clause if possible, or construct a set of keys.
+    # Postgres supports `(col1, col2) NOT IN ((val1, val2), ...)`
+    
+    # Upsert first to ensure everything is current
+    upserted_count = upsert_expa_realizations(db, rows)
+
+    # Delete realizations in this LC who are NOT in the new batch
+    # Since SQLAlchemy's notin_ with tuples can be tricky across versions/dialects,
+    # and we already have the home_lc_id scope, we can fetch existing and compare, 
+    # or use a raw-ish expression.
+    
+    # Collect new keys
+    new_keys = {(str(r["expa_person_id"]), int(r["opp_id"])) for r in rows}
+
+    from sqlalchemy import and_, not_
+    
+    # A cleaner way: delete where home_lc_id matches and (person_id, opp_id) NOT IN new_keys
+    # However, for simplicity and safety with SQLAlchemy 2.0+, we can just use the tuple approach.
+    from sqlalchemy import tuple_
+    delete_stmt = (
+        ExpaLeadRealization.__table__.delete()
+        .where(ExpaLeadRealization.home_lc_id == home_lc_id)
+        .where(
+            not_(
+                tuple_(ExpaLeadRealization.expa_person_id, ExpaLeadRealization.opp_id).in_(
+                    list(new_keys)
+                )
+            )
+        )
+    )
+    delete_res = db.execute(delete_stmt)
+    deleted_count = delete_res.rowcount or 0
+
+    return {"upserted": upserted_count, "deleted": deleted_count}

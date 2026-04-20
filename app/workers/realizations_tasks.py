@@ -4,7 +4,7 @@ from celery.utils.log import get_task_logger
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.repositories.expa_realizations_repository import upsert_expa_realizations
+from app.repositories.expa_realizations_repository import sync_realizations_for_lc
 from app.services.expa_realizations_client import ExpaRealizationsClient
 from app.services.expa_realizations_mapper import realizations_to_rows
 from app.workers.celery_app import celery
@@ -29,13 +29,14 @@ def fetch_realizations_hourly() -> dict:
 
     client = ExpaRealizationsClient(api_url=AIESEC_API_URL, api_token=AIESEC_API_TOKEN, timeout_seconds=60)
 
-    grand_total = 0
+    grand_total_upserted = 0
+    grand_total_deleted = 0
 
     for lc_code in LC_CODES:
         logger.info("Fetching realizations for LC %s", lc_code)
 
         page = 1
-        lc_total = 0
+        all_lc_rows = []
 
         while True:
             realizations = client.fetch_realizations(
@@ -47,33 +48,31 @@ def fetch_realizations_hourly() -> dict:
             if not realizations:
                 break
 
-            rows = realizations_to_rows(realizations,home_committee_id=lc_code)
-            if not rows:
-                if len(realizations) < PER_PAGE:
-                    break
-                page += 1
-                continue
-
-            db = SessionLocal()
-            try:
-                upserted = upsert_expa_realizations(db, rows)
-                db.commit()
-            except Exception:
-                db.rollback()
-                raise
-            finally:
-                db.close()
-
-            lc_total += upserted
-            logger.info("LC %s | page %s | fetched=%s | upserted=%s", lc_code, page, len(realizations), upserted)
+            rows = realizations_to_rows(realizations, home_committee_id=lc_code)
+            if rows:
+                all_lc_rows.extend(rows)
 
             if len(realizations) < PER_PAGE:
                 break
 
             page += 1
 
-        logger.info("Finished realizations LC %s | total_upserted=%s", lc_code, lc_total)
-        grand_total += lc_total
+        # Perform sync for this LC
+        db = SessionLocal()
+        try:
+            stats = sync_realizations_for_lc(db, all_lc_rows, home_lc_id=int(lc_code))
+            db.commit()
+            upserted = stats["upserted"]
+            deleted = stats["deleted"]
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
-    logger.info("Finished realizations ALL LCs | grand_total_upserted=%s", grand_total)
-    return {"ok": True, "total_upserted": grand_total, "from": APPROVED_FROM_DATE}
+        logger.info("LC %s | rows=%s | upserted=%s | deleted=%s", lc_code, len(all_lc_rows), upserted, deleted)
+        grand_total_upserted += upserted
+        grand_total_deleted += deleted
+
+    logger.info("Finished realizations ALL LCs | total_upserted=%s | total_deleted=%s", grand_total_upserted, grand_total_deleted)
+    return {"ok": True, "total_upserted": grand_total_upserted, "total_deleted": grand_total_deleted, "from": APPROVED_FROM_DATE}

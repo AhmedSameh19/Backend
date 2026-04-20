@@ -4,7 +4,7 @@ from celery.utils.log import get_task_logger
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.repositories.expa_icx_realizations_repository import upsert_icx_realizations
+from app.repositories.expa_icx_realizations_repository import sync_icx_realizations_for_lc
 from app.services.expa_icx_realizations_client import ExpaICXRealizationsClient
 from app.services.expa_icx_realizations_mapper import icx_realizations_to_rows
 from app.workers.celery_app import celery
@@ -28,13 +28,14 @@ def fetch_icx_realizations_hourly() -> dict:
 
     client = ExpaICXRealizationsClient(api_url=AIESEC_API_URL, api_token=AIESEC_API_TOKEN, timeout_seconds=60)
 
-    grand_total = 0
+    grand_total_upserted = 0
+    grand_total_deleted = 0
 
     for host_lc_id in HOST_LC_IDS:
         logger.info("Fetching iCX realizations for host LC %s", host_lc_id)
 
         page = 1
-        lc_total = 0
+        all_lc_rows = []
 
         while True:
             realizations = client.fetch_icx_realizations_page(
@@ -48,38 +49,30 @@ def fetch_icx_realizations_hourly() -> dict:
                 break
 
             rows = icx_realizations_to_rows(realizations, host_lc_id=host_lc_id)
-            if not rows:
-                if len(realizations) < PER_PAGE:
-                    break
-                page += 1
-                continue
-
-            db = SessionLocal()
-            try:
-                upserted = upsert_icx_realizations(db, rows)
-                db.commit()
-            except Exception:
-                db.rollback()
-                raise
-            finally:
-                db.close()
-
-            lc_total += upserted
-            logger.info(
-                "host_lc_id %s | page %s | fetched=%s | upserted=%s",
-                host_lc_id,
-                page,
-                len(realizations),
-                upserted,
-            )
+            if rows:
+                all_lc_rows.extend(rows)
 
             if len(realizations) < PER_PAGE:
                 break
 
             page += 1
 
-        logger.info("Finished iCX realizations host_lc_id %s | total_upserted=%s", host_lc_id, lc_total)
-        grand_total += lc_total
+        # Perform sync for this Host LC
+        db = SessionLocal()
+        try:
+            stats = sync_icx_realizations_for_lc(db, all_lc_rows, host_lc_id=str(host_lc_id))
+            db.commit()
+            upserted = stats["upserted"]
+            deleted = stats["deleted"]
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
-    logger.info("Finished iCX realizations ALL host LCs | grand_total_upserted=%s", grand_total)
-    return {"ok": True, "total_upserted": grand_total, "from": REALIZED_FROM_DATE}
+        logger.info("host_lc_id %s | rows=%s | upserted=%s | deleted=%s", host_lc_id, len(all_lc_rows), upserted, deleted)
+        grand_total_upserted += upserted
+        grand_total_deleted += deleted
+
+    logger.info("Finished iCX realizations ALL host LCs | total_upserted=%s | total_deleted=%s", grand_total_upserted, grand_total_deleted)
+    return {"ok": True, "total_upserted": grand_total_upserted, "total_deleted": grand_total_deleted, "from": REALIZED_FROM_DATE}

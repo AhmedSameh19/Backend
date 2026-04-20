@@ -45,3 +45,28 @@ def upsert_icx_realizations(db: Session, rows: List[Dict[str, Any]]) -> int:
 
     result = db.execute(stmt)
     return result.rowcount or 0
+
+def sync_icx_realizations_for_lc(db: Session, rows: List[Dict[str, Any]], host_lc_id: str) -> Dict[str, int]:
+    """Full sync for ICX realizations of an LC: adds/updates current realizations and DELETES those no longer in the list."""
+    if not rows:
+        # If no realizations returned for this LC, delete all existing for this host LC
+        delete_stmt = ExpaICXRealization.__table__.delete().where(ExpaICXRealization.host_lc_id == host_lc_id)
+        res = db.execute(delete_stmt)
+        return {"upserted": 0, "deleted": res.rowcount or 0}
+
+    # Identify realizations to keep
+    new_application_ids = {str(r["application_id"]) for r in rows if r.get("application_id")}
+
+    # Delete realizations in this host LC who are NOT in the new batch
+    delete_stmt = (
+        ExpaICXRealization.__table__.delete()
+        .where(ExpaICXRealization.host_lc_id == host_lc_id)
+        .where(ExpaICXRealization.application_id.notin_(list(new_application_ids)))
+    )
+    delete_res = db.execute(delete_stmt)
+    deleted_count = delete_res.rowcount or 0
+
+    # Upsert the current batch
+    upserted_count = upsert_icx_realizations(db, rows)
+
+    return {"upserted": upserted_count, "deleted": deleted_count}

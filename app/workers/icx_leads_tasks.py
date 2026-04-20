@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.repositories.expa_icx_leads_repository import upsert_expa_icx_leads
+from app.repositories.expa_icx_leads_repository import upsert_expa_icx_leads, delete_stale_icx_leads
 from app.services.expa_icx_leads_client import ExpaICXLeadsClient
 from app.services.expa_icx_leads_mapper import icx_applications_to_rows
 from app.workers.celery_app import celery
@@ -44,6 +44,7 @@ def fetch_icx_leads_hourly() -> dict:
         raise RuntimeError("AIESEC_API_TOKEN is not set")
 
     client = ExpaICXLeadsClient(api_url=AIESEC_API_URL, api_token=AIESEC_API_TOKEN, timeout_seconds=60)
+    all_fetched_application_ids = []
 
     def fetch_range(*, created_from: datetime, created_to: datetime, programmes: list[int]) -> int:
         page = 1
@@ -66,6 +67,11 @@ def fetch_icx_leads_hourly() -> dict:
 
             if not items:
                 break
+            
+            # Collect IDs for cleanup
+            for item in items:
+                if "id" in item:
+                    all_fetched_application_ids.append(str(item["id"]))
 
             rows = icx_applications_to_rows(items)
             if not rows:
@@ -139,5 +145,16 @@ def fetch_icx_leads_hourly() -> dict:
             start = slice_end
             slice_days = 31
 
-    logger.info("Finished iCX leads | total_upserted=%s", grand_total)
-    return {"ok": True, "total_upserted": grand_total}
+    # Final cleanup for this MC
+    db = SessionLocal()
+    try:
+        deleted = delete_stale_icx_leads(db, all_fetched_application_ids, str(HOME_MC_ID))
+        db.commit()
+        logger.info("Finished iCX leads | total_upserted=%s | deleted=%s", grand_total, deleted)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    return {"ok": True, "total_upserted": grand_total, "deleted": deleted}

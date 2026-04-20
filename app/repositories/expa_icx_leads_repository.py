@@ -49,3 +49,19 @@ def upsert_expa_icx_leads(db: Session, rows: List[Dict[str, Any]]) -> int:
 
     result = db.execute(stmt)
     return result.rowcount or 0
+
+def delete_stale_icx_leads(db: Session, fetched_application_ids: List[str], host_mc_id: str) -> int:
+    """Removes ICX leads for the given MC that are not in the fetched list."""
+    if not fetched_application_ids:
+        # If no leads fetched, delete all for this MC
+        delete_stmt = ExpaICXLead.__table__.delete().where(ExpaICXLead.opportunity_host_mc_id == host_mc_id)
+        res = db.execute(delete_stmt)
+        return res.rowcount or 0
+
+    delete_stmt = (
+        ExpaICXLead.__table__.delete()
+        .where(ExpaICXLead.opportunity_host_mc_id == host_mc_id)
+        .where(ExpaICXLead.application_id.notin_(fetched_application_ids))
+    )
+    res = db.execute(delete_stmt)
+    return res.rowcount or 0
