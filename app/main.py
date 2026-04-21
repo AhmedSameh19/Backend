@@ -1,17 +1,32 @@
 import re
-
+import asyncio
 import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.exceptions import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# Monkey-patch slowapi BEFORE any other imports to fix the AttributeError crash
+import slowapi.extension
+import slowapi.middleware
+
+def safe_rate_limit_exceeded_handler(request, exc):
+    if not hasattr(exc, "detail"):
+        setattr(exc, "detail", str(exc))
+    return JSONResponse(
+        status_code=429,
+        content={"error": f"Rate limit exceeded: {exc.detail}"}
+    )
+
+slowapi.extension._rate_limit_exceeded_handler = safe_rate_limit_exceeded_handler
+if hasattr(slowapi.middleware, "_rate_limit_exceeded_handler"):
+    slowapi.middleware._rate_limit_exceeded_handler = safe_rate_limit_exceeded_handler
+
 from app.api.v1.router import api_router
 from app.core.config import settings
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
-
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -25,7 +40,9 @@ limiter = Limiter(
 
 app = FastAPI(title="AIESEC Egypt CRM API")
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Standard exception handler
+app.add_exception_handler(RateLimitExceeded, safe_rate_limit_exceeded_handler)
 
 
 @app.exception_handler(Exception)
