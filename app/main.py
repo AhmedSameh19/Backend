@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.exceptions import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Monkey-patch slowapi BEFORE any other imports to fix the AttributeError crash
+# Monkey-patch slowapi BEFORE any other imports to fix the At       tributeError crash
 import slowapi.extension
 import slowapi.middleware
 

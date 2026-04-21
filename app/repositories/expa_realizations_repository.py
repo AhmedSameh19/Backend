@@ -13,30 +13,36 @@ def upsert_expa_realizations(db: Session, rows: List[Dict[str, Any]]) -> int:
     if not rows:
         return 0
 
-    stmt = insert(ExpaLeadRealization.__table__).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        constraint="uq_expa_lead_realizations_person_opp",
-        set_={
-            "full_name": stmt.excluded.full_name,
-            "email": stmt.excluded.email,
-            "created_at": stmt.excluded.created_at,
-            "contact_number": stmt.excluded.contact_number,
-            "home_lc_id": stmt.excluded.home_lc_id,
-            "host_lc_name": stmt.excluded.host_lc_name,
-            "host_mc_name": stmt.excluded.host_mc_name,
-            "assigned_member_id": stmt.excluded.assigned_member_id,
-            "assigned_member_name": stmt.excluded.assigned_member_name,
-            "programme": stmt.excluded.programme,
-            "opp_title": stmt.excluded.opp_title,
-            "status": stmt.excluded.status,
-            "slot_start_date": stmt.excluded.slot_start_date,
-            "slot_end_date": stmt.excluded.slot_end_date,
-            "updated_at": stmt.excluded.updated_at,
-        },
-    )
+    batch_size = 1000
+    total_rowcount = 0
 
-    result = db.execute(stmt)
-    return result.rowcount or 0
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i : i + batch_size]
+        stmt = insert(ExpaLeadRealization.__table__).values(batch)
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_expa_lead_realizations_person_opp",
+            set_={
+                "full_name": stmt.excluded.full_name,
+                "email": stmt.excluded.email,
+                "created_at": stmt.excluded.created_at,
+                "contact_number": stmt.excluded.contact_number,
+                "home_lc_id": stmt.excluded.home_lc_id,
+                "host_lc_name": stmt.excluded.host_lc_name,
+                "host_mc_name": stmt.excluded.host_mc_name,
+                "assigned_member_id": stmt.excluded.assigned_member_id,
+                "assigned_member_name": stmt.excluded.assigned_member_name,
+                "programme": stmt.excluded.programme,
+                "opp_title": stmt.excluded.opp_title,
+                "status": stmt.excluded.status,
+                "slot_start_date": stmt.excluded.slot_start_date,
+                "slot_end_date": stmt.excluded.slot_end_date,
+                "updated_at": stmt.excluded.updated_at,
+            },
+        )
+        result = db.execute(stmt)
+        total_rowcount += result.rowcount or 0
+
+    return total_rowcount
 
 def sync_realizations_for_lc(db: Session, rows: List[Dict[str, Any]], home_lc_id: int) -> Dict[str, int]:
     """Full sync for realizations of an LC: adds/updates current realizations and DELETES those no longer in the list."""

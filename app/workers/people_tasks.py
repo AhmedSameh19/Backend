@@ -1,3 +1,5 @@
+from __future__ import annotations
+from datetime import date, timedelta
 from celery.utils.log import get_task_logger
 
 from app.core.config import settings
@@ -21,59 +23,89 @@ HOME_MC_ID = settings.EXPA_HOME_MC_ID
 
 @celery.task(name="expa.fetch_people")
 def fetch_people_hourly() -> dict:
-    if not AIESEC_API_URL:
-        raise RuntimeError("AIESEC_API_URL is not set")
-    if not AIESEC_API_TOKEN:
-        raise RuntimeError("AIESEC_API_TOKEN is not set")
+    """Parent task that triggers sub-tasks for each Local Committee (fan-out)."""
+    if not LC_CODES:
+        logger.warning("No LC_CODES configured for people sync.")
+        return {"ok": False, "count": 0}
+
+    for lc_code in LC_CODES:
+        sync_people_for_lc_task.delay(lc_code)
+
+    logger.info("Dispatched %s sync tasks for people leads.", len(LC_CODES))
+    return {"ok": True, "dispatched": len(LC_CODES)}
+
+
+@celery.task(
+    name="expa.sync_people_for_lc",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=5,
+)
+def sync_people_for_lc_task(self, lc_code: int) -> dict:
+    """Worker task to sync leads for a specific LC. Includes adaptive windowing."""
+    if not AIESEC_API_URL or not AIESEC_API_TOKEN:
+        raise RuntimeError("AIESEC_API configuration missing")
 
     client = ExpaClient(api_url=AIESEC_API_URL, api_token=AIESEC_API_TOKEN, timeout_seconds=60)
 
-    grand_total_upserted = 0
-    grand_total_deleted = 0
+    start_date = date.fromisoformat(REGISTERED_FROM)
+    end_date = date.fromisoformat(REGISTERED_TO)
 
-    for lc_code in LC_CODES:
-        logger.info("Fetching people for LC %s", lc_code)
-
+    all_lc_rows = []
+    
+    # Adaptive Windowing Logic
+    def fetch_window(dt_from: date, dt_to: date):
+        rows_batch = []
         page = 1
-        all_lc_rows = []
-
         while True:
             people = client.fetch_people_page(
                 home_committee=lc_code,
-                registered_from=REGISTERED_FROM,
-                registered_to=REGISTERED_TO,
+                registered_from=dt_from.isoformat(),
+                registered_to=dt_to.isoformat(),
                 per_page=PER_PAGE,
                 page=page,
             )
-
             if not people:
                 break
 
-            rows = people_to_rows(people, home_committee_id=lc_code, home_mc_id=HOME_MC_ID)
-            if rows:
-                all_lc_rows.extend(rows)
+            mapped = people_to_rows(people, home_committee_id=lc_code, home_mc_id=HOME_MC_ID)
+            if mapped:
+                rows_batch.extend(mapped)
 
             if len(people) < PER_PAGE:
                 break
-
             page += 1
+        return rows_batch
 
-        # Perform sync for this LC
-        db = SessionLocal()
+    current_start = start_date
+    slice_days = 366  # Start by trying the whole year
+
+    while current_start <= end_date:
+        current_end = min(current_start + timedelta(days=slice_days - 1), end_date)
         try:
-            stats = sync_leads_for_lc(db, all_lc_rows, home_lc_id=int(lc_code))
-            db.commit()
-            upserted = stats["upserted"]
-            deleted = stats["deleted"]
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
+            batch = fetch_window(current_start, current_end)
+            all_lc_rows.extend(batch)
+            current_start = current_end + timedelta(days=1)
+        except Exception as e:
+            # If the window is too large or times out, shrink and retry
+            if slice_days > 7:
+                slice_days = max(7, slice_days // 4)
+                logger.warning("LC %s | timeout/error; shrinking window to %s days", lc_code, slice_days)
+                continue
+            else:
+                logger.error("LC %s | Failed to sync window %s to %s: %s", lc_code, current_start, current_end, e)
+                raise # Let celery handle the task retry
 
-        logger.info("LC %s | rows=%s | upserted=%s | deleted=%s", lc_code, len(all_lc_rows), upserted, deleted)
-        grand_total_upserted += upserted
-        grand_total_deleted += deleted
-
-    logger.info("Finished ALL LCs | total_upserted=%s | total_deleted=%s", grand_total_upserted, grand_total_deleted)
-    return {"ok": True, "total_upserted": grand_total_upserted, "total_deleted": grand_total_deleted}
+    # Process DB Sync
+    db = SessionLocal()
+    try:
+        stats = sync_leads_for_lc(db, all_lc_rows, home_lc_id=int(lc_code))
+        db.commit()
+        logger.info("LC %s | Final Sync | rows=%s | upserted=%s | deleted=%s", lc_code, len(all_lc_rows), stats["upserted"], stats["deleted"])
+        return {"lc": lc_code, "rows": len(all_lc_rows), **stats}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()

@@ -38,25 +38,59 @@ def _is_result_window_error(exc: Exception) -> bool:
 
 @celery.task(name="expa.fetch_icx_leads")
 def fetch_icx_leads_hourly() -> dict:
-    if not AIESEC_API_URL:
-        raise RuntimeError("AIESEC_API_URL is not set")
-    if not AIESEC_API_TOKEN:
-        raise RuntimeError("AIESEC_API_TOKEN is not set")
+    """Parent task that triggers sub-tasks for each month for iCX leads (fan-out)."""
+    start_date = _parse_iso_datetime(ICX_CREATED_FROM)
+    end_date = datetime.now(timezone.utc)
+    
+    # Fan out by month
+    current = start_date
+    dispatched = 0
+    while current < end_date:
+        next_month = (current.replace(day=1) + timedelta(days=32)).replace(day=1)
+        window_end = min(next_month - timedelta(seconds=1), end_date)
+        
+        sync_icx_leads_for_window_task.delay(
+            current.isoformat(), 
+            window_end.isoformat()
+        )
+        
+        current = next_month
+        dispatched += 1
+
+    logger.info("Dispatched %s iCX sync tasks (by month).", dispatched)
+    return {"ok": True, "dispatched": dispatched}
+
+
+@celery.task(
+    name="expa.sync_icx_leads_for_window",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=5,
+)
+def sync_icx_leads_for_window_task(self, dt_from_iso: str, dt_to_iso: str) -> dict:
+    """Worker task to sync iCX leads for a specific time window."""
+    if not AIESEC_API_URL or not AIESEC_API_TOKEN:
+        raise RuntimeError("AIESEC_API configuration missing")
 
     client = ExpaICXLeadsClient(api_url=AIESEC_API_URL, api_token=AIESEC_API_TOKEN, timeout_seconds=60)
-    all_fetched_application_ids = []
-
-    def fetch_range(*, created_from: datetime, created_to: datetime, programmes: list[int]) -> int:
+    
+    dt_from = _parse_iso_datetime(dt_from_iso)
+    dt_to = _parse_iso_datetime(dt_to_iso)
+    
+    fetched_ids = []
+    total_upserted = 0
+    
+    def fetch_window(window_from: datetime, window_to: datetime, programmes: list[int]):
         page = 1
-        total_upserted = 0
-
+        batch_upserted = 0
         while True:
             try:
                 items = client.fetch_icx_leads_page(
                     opportunity_home_mc=HOME_MC_ID,
                     programmes=programmes,
-                    created_from=created_from.isoformat(),
-                    created_to=created_to.isoformat(),
+                    created_from=window_from.isoformat(),
+                    created_to=window_to.isoformat(),
                     per_page=PER_PAGE,
                     page=page,
                 )
@@ -67,94 +101,74 @@ def fetch_icx_leads_hourly() -> dict:
 
             if not items:
                 break
-            
-            # Collect IDs for cleanup
+                
             for item in items:
                 if "id" in item:
-                    all_fetched_application_ids.append(str(item["id"]))
+                    fetched_ids.append(str(item["id"]))
 
             rows = icx_applications_to_rows(items)
-            if not rows:
-                break
-
-            db = SessionLocal()
-            try:
-                upserted = upsert_expa_icx_leads(db, rows)
-                db.commit()
-            except Exception:
-                db.rollback()
-                raise
-            finally:
-                db.close()
-
-            total_upserted += upserted
-            logger.info(
-                "iCX | %s → %s | page %s | fetched=%s | upserted=%s",
-                created_from.date(),
-                created_to.date(),
-                page,
-                len(items),
-                upserted,
-            )
+            if rows:
+                db = SessionLocal()
+                try:
+                    upserted = upsert_expa_icx_leads(db, rows)
+                    db.commit()
+                    batch_upserted += upserted
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.close()
 
             if len(items) < PER_PAGE:
                 break
-
             if page * PER_PAGE >= 10_000:
-                raise _ExpaResultWindowTooLarge("Reached page window limit for this time slice")
-
+                raise _ExpaResultWindowTooLarge("Reached page window limit")
             page += 1
+        return batch_upserted
 
-        return total_upserted
+    # Process with adaptive windowing
+    current_start = dt_from
+    slice_days = (dt_to - dt_from).days + 1
 
-    start = _parse_iso_datetime(ICX_CREATED_FROM)
-    end = datetime.now(timezone.utc)
-
-    slice_days = 31
-    grand_total = 0
-
-    while start < end:
-        slice_end = min(start + timedelta(days=slice_days), end)
-
+    while current_start < dt_to:
+        current_end = min(current_start + timedelta(days=slice_days), dt_to)
         try:
-            grand_total += fetch_range(created_from=start, created_to=slice_end, programmes=list(ICX_PROGRAMMES))
-            start = slice_end
-            slice_days = 31
+            total_upserted += fetch_window(current_start, current_end, list(ICX_PROGRAMMES))
+            current_start = current_end
+            # Reset slice_days if it was small
+            slice_days = (dt_to - dt_from).days + 1
         except _ExpaResultWindowTooLarge:
             if slice_days > 1:
                 slice_days = max(1, slice_days // 2)
-                logger.warning(
-                    "iCX | result window too large; shrinking slice to %s day(s)",
-                    slice_days,
-                )
+                logger.warning("iCX Window %s | Shrinking slice to %s days", dt_from.strftime("%Y-%m"), slice_days)
                 continue
+            
+            # Split by programme if even 1 day is too large
+            for prog in ICX_PROGRAMMES:
+                total_upserted += fetch_window(current_start, current_end, [int(prog)])
+            current_start = current_end
+        except Exception:
+            raise # Let celery retry
 
-            logger.warning(
-                "iCX | still too large at 1-day slice; splitting by programme for %s",
-                start.date(),
-            )
-
-            progressed = False
-            for programme in ICX_PROGRAMMES:
-                grand_total += fetch_range(created_from=start, created_to=slice_end, programmes=[int(programme)])
-                progressed = True
-
-            if not progressed:
-                raise
-
-            start = slice_end
-            slice_days = 31
-
-    # Final cleanup for this MC
+    # Displacement within this window
     db = SessionLocal()
     try:
-        deleted = delete_stale_icx_leads(db, all_fetched_application_ids, str(HOME_MC_ID))
+        deleted = delete_stale_icx_leads(
+            db, 
+            fetched_ids, 
+            str(HOME_MC_ID),
+            created_from=dt_from_iso,
+            created_to=dt_to_iso
+        )
         db.commit()
-        logger.info("Finished iCX leads | total_upserted=%s | deleted=%s", grand_total, deleted)
+        logger.info(
+            "iCX Window %s - %s | Upserted: %s | Deleted: %s", 
+            dt_from.date(), dt_to.date(), total_upserted, deleted
+        )
+        return {"upserted": total_upserted, "deleted": deleted}
     except Exception:
         db.rollback()
         raise
     finally:
         db.close()
 
-    return {"ok": True, "total_upserted": grand_total, "deleted": deleted}

@@ -12,35 +12,39 @@ def upsert_expa_leads(db: Session, rows: List[Dict[str, Any]]) -> int:
     if not rows:
         return 0
 
-    stmt = insert(ExpaLead.__table__).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["expa_person_id"],
-        set_={
-            "created_at": stmt.excluded.created_at,
-            "full_name": stmt.excluded.full_name,
-            "email": stmt.excluded.email,
-            "phone": stmt.excluded.phone,
-            "gender": stmt.excluded.gender,
-            "dob": stmt.excluded.dob,
-            "expa_status": stmt.excluded.expa_status,
-            "academic_backgrounds": stmt.excluded.academic_backgrounds,
-            "selected_programmes": stmt.excluded.selected_programmes,
-            "home_lc_name": stmt.excluded.home_lc_name,
-            "home_mc_name": stmt.excluded.home_mc_name,
-            "home_lc_id": stmt.excluded.home_lc_id,
-            "home_mc_id": stmt.excluded.home_mc_id,
-            "latest_graduation_date": stmt.excluded.latest_graduation_date,
-            "opportunity_applications_count": stmt.excluded.opportunity_applications_count,
-            "last_synced_at": stmt.excluded.last_synced_at,
-            # NOTE: This preserves your current behavior (updates inserted_at on conflict).
-            # If you want inserted_at to remain the first insert time, remove this line.
-            "inserted_at": stmt.excluded.inserted_at,
-            "updated_at": stmt.excluded.updated_at,
-        },
-    )
+    batch_size = 1000  # Safe batch size to avoid parameter limit (20-30 cols * 1000 < 65535)
+    total_rowcount = 0
 
-    result = db.execute(stmt)
-    return result.rowcount or 0
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i : i + batch_size]
+        stmt = insert(ExpaLead.__table__).values(batch)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["expa_person_id"],
+            set_={
+                "created_at": stmt.excluded.created_at,
+                "full_name": stmt.excluded.full_name,
+                "email": stmt.excluded.email,
+                "phone": stmt.excluded.phone,
+                "gender": stmt.excluded.gender,
+                "dob": stmt.excluded.dob,
+                "expa_status": stmt.excluded.expa_status,
+                "academic_backgrounds": stmt.excluded.academic_backgrounds,
+                "selected_programmes": stmt.excluded.selected_programmes,
+                "home_lc_name": stmt.excluded.home_lc_name,
+                "home_mc_name": stmt.excluded.home_mc_name,
+                "home_lc_id": stmt.excluded.home_lc_id,
+                "home_mc_id": stmt.excluded.home_mc_id,
+                "latest_graduation_date": stmt.excluded.latest_graduation_date,
+                "opportunity_applications_count": stmt.excluded.opportunity_applications_count,
+                "last_synced_at": stmt.excluded.last_synced_at,
+                "inserted_at": stmt.excluded.inserted_at,
+                "updated_at": stmt.excluded.updated_at,
+            },
+        )
+        result = db.execute(stmt)
+        total_rowcount += result.rowcount or 0
+
+    return total_rowcount
 
 
 def sync_leads_for_lc(db: Session, rows: List[Dict[str, Any]], home_lc_id: int) -> Dict[str, int]:
